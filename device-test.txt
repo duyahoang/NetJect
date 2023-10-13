@@ -1,0 +1,183 @@
+switch# show version
+Cisco Nexus Operating System (NX-OS) Software
+TAC support: http://www.cisco.com/tac
+Copyright (c) 2002-2008, Cisco Systems, Inc. All rights reserved.
+The copyrights to certain works contained in this software are
+owned by other third parties and used and distributed under
+license. Certain components of this software are licensed under
+the GNU General Public License (GPL) version 2.0 or the GNU
+Lesser General Public License (LGPL) Version 2.1. A copy of each
+such license is available at
+http://www.opensource.org/licenses/gpl-2.0.php and
+http://www.opensource.org/licenses/lgpl-2.1.php
+Software
+ BIOS: version 3.17.0
+ loader: version N/A
+ kickstart: version 4.0(1a) [gdb]
+ system: version 4.0(1a) [gdb]
+ BIOS compile time: 03/23/08
+ kickstart image file is: bootflash:/n7000-s1-kickstart.4.0.1a.bin
+ kickstart compile time: 5/8/2008 13:00:00 [05/20/2008 07:52:26]
+ system image file is: bootflash:/n7000-s1-dk9.4.0.1a.bin
+ system compile time: 5/8/2008 13:00:00 [05/20/2008 08:35:00]
+Hardware
+ cisco Nexus7000 C7010 (10 Slot) Chassis ("Supervisor module-1X")
+ Intel(R) Xeon(R) CPU with 2063436 kB of memory.
+ Processor Board ID JAB10380101
+ Device name: switch
+ bootflash: 1023120 kB
+ slot0: 0 kB (expansion flash)
+Kernel uptime is 1 day(s), 3 hour(s), 48 minute(s), 20 second(s)
+Last reset at 761445 usecs after Wed May 21 11:46:23 2008
+ Reason: Reset Requested by CLI command reload
+ System version: 4.0(1.51)
+ Service:
+plugin
+ Core Plugin, Ethernet Plugin
+CMP (Module 6) no response
+CMP (Module 5) no response
+switch#
+switch# show interface
+Ethernet101/1/1 is up
+admin state is up,
+  Hardware: 100/1000 Ethernet, address: 1cdf.0f3b.8042 (bia 1cdf.0f3b.8042)
+  MTU 9216 bytes, BW 1000000 Kbit, DLY 10 usec
+  reliability 255/255, txload 1/255, rxload 1/255
+  Encapsulation ARPA, medium is broadcast
+  Port mode is trunk
+  full-duplex, 1000 Mb/s
+  Beacon is turned off
+  Auto-Negotiation is turned on
+  Input flow-control is off, output flow-control is on
+  Auto-mdix is turned off
+  Switchport monitor is off
+  EtherType is 0x8100
+  Last link flapped 2d16h
+  Last clearing of "show interface" counters never
+  2 interface resets
+  30 seconds input rate 64 bits/sec, 0 packets/sec
+  30 seconds output rate 72 bits/sec, 0 packets/sec
+  Load-Interval #2: 5 minute (300 seconds)
+    input rate 64 bps, 0 pps; output rate 72 bps, 0 pps
+  RX
+    0 unicast packets  6331 multicast packets  0 broadcast packets
+    6331 input packets  519142 bytes
+    0 jumbo packets  0 storm suppression packets
+    0 runts  0 giants  0 CRC  0 no buffer
+    0 input error  0 short frame  0 overrun   0 underrun  0 ignored
+    0 watchdog  0 bad etype drop  0 bad proto drop  0 if down drop
+    0 input with dribble  0 input discard
+    0 Rx pause
+  TX
+    0 unicast packets  2124 multicast packets  16 broadcast packets
+    2140 output packets  576661 bytes
+    0 jumbo packets
+    0 output error  0 collision  0 deferred  0 late collision
+    0 lost carrier  0 no carrier  0 babble  0 output discard
+    0 Tx pause
+switch#
+switch(config)# show interface trunk
+-----------------------------------------------------------------------------
+Port       Native  Status        Port
+           Vlan                  Channel
+-----------------------------------------------------------------------------
+Eth2/9     1       --      --
+Eth2/10    1       trnk-bndl     Po50
+Po50       1       not-trunking  --
+-----------------------------------------------------------------------------
+Port       Vlans Allowed on Trunk
+-----------------------------------------------------------------------------
+Eth2/9     1
+Eth2/10    1-3967,4048-4093
+Po50       1-3967,4048-4093
+-----------------------------------------------------------------------------
+Port       STP Forwarding
+-----------------------------------------------------------------------------
+Eth2/9     none
+Eth2/10    none
+Po50       none
+switch#
+switch# show vlan
+VLAN Name                             Status    Ports
+---- -------------------------------- --------- -------------------------------
+1    default                          active    Eth5/1, Eth5/2, Eth5/3, Eth5/4
+                                                Eth5/5, Eth5/6, Eth5/7, Eth5/8
+                                                Eth5/9, Eth5/10, Eth5/11
+                                                Eth5/12, Eth5/13, Eth5/14
+                                                Eth5/15, Eth5/16, Eth5/17
+                                                Eth5/18, Eth5/19, Eth5/20
+                                                Eth5/21, Eth5/22, Eth5/23
+                                                Eth5/24, Eth5/25, Eth5/26
+                                                Eth5/27, Eth5/28, Eth5/29
+                                                Eth5/30, Eth5/31, Eth5/32
+                                                Eth7/1
+10   VLAN0010                         active
+VLAN Type  Vlan-mode
+---- ----- ----------
+1    enet  CE
+10   enet  FABRICPATH
+Remote SPAN VLANs
+-------------------------------------------------------------------------------
+Primary  Secondary  Type             Ports
+-------  ---------  ---------------  -------------------------------------------
+switch#
+switch# show interface status
+--------------------------------------------------------------------------------
+Port           Name               Status   Vlan      Duplex  Speed   Type
+--------------------------------------------------------------------------------
+Eth2/1         --                 down     routed    auto    auto    1000BaseT
+Eth2/2         --                 down     routed    auto    auto    1000BaseT
+Eth2/3         --                 down     routed    auto    auto    1000BaseT
+Eth2/4         --                 down     1         auto    auto    1000BaseT
+Eth2/5         --                 down     routed    auto    auto    1000BaseT
+Eth2/6         --                 down     1         auto    auto    1000BaseT
+Eth2/7         server2            up       1         full    1000    1000BaseT
+Eth2/8         --                 down     routed    auto    auto    1000BaseT
+Eth2/9         --                 up       1         full    1000    1000BaseT
+Eth2/10        ethernet slot 2 po down     1         auto    auto    1000BaseT
+Eth2/11        --                 down     routed    auto    auto    1000BaseT
+Eth2/12        --                 down     routed    auto    auto    1000BaseT
+Eth2/13        --                 down     routed    auto    auto    1000BaseT
+Eth2/14        --                 down     routed    auto    auto    1000BaseT
+Eth2/15        --                 down     routed    auto    auto    1000BaseT
+Eth2/16        --                 down     routed    auto    auto    1000BaseT
+Eth2/17        --                 down     routed    auto    auto    1000BaseT
+Eth2/18        --                 down     routed    auto    auto    1000BaseT
+Eth2/19        --                 down     routed    auto    auto    1000BaseT
+Eth2/20        --                 down     routed    auto    auto    1000BaseT
+Eth2/21        --                 down     routed    auto    auto    1000BaseT
+Eth2/22        --                 down     routed    auto    auto    1000BaseT
+Eth2/23        --                 down     routed    auto    auto    1000BaseT
+Eth2/24        --                 down     routed    auto    auto    1000BaseT
+Eth2/25        --                 down     routed    auto    auto    1000BaseT
+Eth2/26        --                 down     routed    auto    auto    1000BaseT
+Eth2/27        --                 down     routed    auto    auto    1000BaseT
+Eth2/28        --                 down     routed    auto    auto    1000BaseT
+Eth2/29        --                 down     routed    auto    auto    1000BaseT
+Eth2/30        --                 down     routed    auto    auto    1000BaseT
+Eth2/31        --                 down     routed    auto    auto    1000BaseT
+Eth2/32        --                 down     routed    auto    auto    1000BaseT
+Eth2/33        --                 down     routed    auto    auto    1000BaseT
+Eth2/34        --                 down     routed    auto    auto    1000BaseT
+Eth2/35        --                 down     routed    auto    auto    1000BaseT
+Eth2/36        --                 down     routed    auto    auto    1000BaseT
+Eth2/37        --                 down     routed    auto    auto    1000BaseT
+Eth2/38        --                 down     routed    auto    auto    1000BaseT
+Eth2/39        --                 down     routed    auto    auto    1000BaseT
+Eth2/40        --                 down     routed    auto    auto    1000BaseT
+Eth2/41        --                 down     routed    auto    auto    1000BaseT
+Eth2/42        --                 down     routed    auto    auto    1000BaseT
+Eth2/43        --                 down     routed    auto    auto    1000BaseT
+Eth2/44        --                 down     routed    auto    auto    1000BaseT
+Eth2/45        --                 down     routed    auto    auto    1000BaseT
+Eth2/46        --                 down     routed    auto    auto    1000BaseT
+Eth2/47        --                 down     routed    auto    auto    1000BaseT
+Eth2/48        --                 down     routed    auto    auto    1000BaseT
+switch(config)# show ip route all
+IP Route Table for VRF "default"
+'*' denotes best ucast next-hop       '**' denotes best mcast next-hop
+'[x/y]' denotes [preference/metric]
+0.0.0.0/32, 1 ucast next-hops, 0 mcast next-hops
+   *via Null0, [220/0], 00:45:24, local, discard
+255.255.255.255/32, 1 ucast next-hops, 0 mcast next-hops
+   *via sup-eth1, [0/0], 00:45:24, local
