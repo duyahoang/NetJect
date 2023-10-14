@@ -437,26 +437,23 @@ async def parse_device(device, command_parsers):
     return {host: result}
 
 
-def write_json(data_list):
-    for data in data_list:
-        for host, output in data.items():
-            filename = f"{host}.json"
-            with open(filename, 'w') as f:
-                json.dump(output, f, indent=4)
+async def write_json(data):
+    """Asynchronously write data to a JSON file."""
+    for host, _ in data.items():
+        filename = f"{host}.json"
+    async with aiofiles.open(f'{filename}', 'w') as file:
+        await file.write(json.dumps(data, indent=4))
 
 
-def load_configuration(file_path):
+async def load_configuration(file_path):
     """Load device configuration from a YAML file."""
-    with open(file_path, 'r') as file:
-        return yaml.safe_load(file)
+    async with aiofiles.open(file_path, 'r') as file:
+        content = await file.read()
+    return yaml.safe_load(content)
 
-def process_device(device, command_parsers):
+
+async def process_device(device, command_parsers):
     """Process a single device based on the provided configuration."""
-    if 'address' in device:
-        logging.info(f'Processing {device["address"]}...')
-    elif 'file' in device:
-        logging.info(f'Processing {device["file"]}...')
-    
     os_type = device.get('os_type', 'nxos')  # default os_type is nxos
     supported_commands = command_parsers.get(os_type, {})
     for cmd in device['commands']:
@@ -464,12 +461,11 @@ def process_device(device, command_parsers):
             print(f"Command {cmd} is not supported for {os_type}")
             exit(1)
     if 'address' in device:
-        return parse_device(device, supported_commands)
+        return await parse_device(device, supported_commands)
     elif 'file' in device:
-        return parse_text_file(device['file'], supported_commands)
+        return await parse_text_file(device['file'], supported_commands)
 
 
-# Main function to orchestrate the parsing process
 async def main():
     
     # command_parsers based on the OS type
@@ -492,13 +488,11 @@ async def main():
         }
     }
 
-    config = load_configuration('devices-config.yaml')
+    config = await load_configuration('devices-config.yaml')
     tasks = []
     if 'devices' in config:
-        # Process each device defined in the configuration
         for device in config['devices']:
             tasks.append(process_device(device, command_parsers))
-    # Gathering results from all the asynchronous tasks
     results = await asyncio.gather(*tasks, return_exceptions=True)
     outputs = []
     for result in results:
@@ -506,8 +500,8 @@ async def main():
             print(f"Error encountered during task: {result}")
         else:
             outputs.append(result)
-    # Write the parsed outputs to a JSON file
-    write_json(outputs)
+    for output in outputs:
+        await write_json(output)
 
 
 # Call the async main function
