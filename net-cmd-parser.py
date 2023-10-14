@@ -1,14 +1,20 @@
-import asyncssh
+# Importing necessary modules
 import asyncio
 import re
 import json
-import csv
-import argparse
 import logging
+import yaml
+import aiofiles
+from scrapli.driver.core import AsyncIOSXEDriver
+from scrapli.driver.core import AsyncNXOSDriver
+
+# Setting up logging
+logging.basicConfig(level=logging.INFO, format='[%(asctime)s] [%(levelname)s]: %(message)s')
 
 
+# Function to parse 'show version' output for NXOS devices
 def parse_nxos_show_version(output):
-    logging.debug('Parsing "show version"...')
+    logging.info('Parsing "show version"...')
     
     # Define regular expressions for the attributes
     regex_map = {
@@ -41,8 +47,9 @@ def parse_nxos_show_version(output):
     return result
 
 
+# Function to parse 'show interface' output for NXOS devices
 def parse_nxos_show_interface(output):
-    logging.debug('Parsing "show interface"...')
+    logging.info('Parsing "show interface"...')
 
     # Define regular expressions for the attributes
     regex_map = {
@@ -91,7 +98,7 @@ def parse_nxos_show_interface(output):
 
 
 def parse_nxos_show_interface_trunk(output):
-    logging.debug('Parsing "show interface trunk"...')
+    logging.info('Parsing "show interface trunk"...')
 
     # Regex patterns map
     regex_map = {
@@ -146,7 +153,7 @@ def parse_nxos_show_interface_trunk(output):
 
 
 def parse_nxos_show_vlan(output):
-    logging.debug('Parsing "show vlan"...')
+    logging.info('Parsing "show vlan"...')
 
     # Regex patterns map
     regex_map = {
@@ -216,10 +223,10 @@ def parse_nxos_show_vlan(output):
 
 
 def parse_nxos_show_interface_status(output):
-    logging.debug('Parsing "show interface status"...')
+    logging.info('Parsing "show interface status"...')
     
     regex_map = {
-        'interface_status': r'^(?P<port>Eth\d+/\d+)\s+(?P<name>.+?)\s+(?P<status>down|err-disabled|err-vlans|inactive|up|module \d{1,2})\s+(?P<vlan>\S+)\s+(?P<duplex>\S+)\s+(?P<speed>\S+)\s+(?P<type>\S+)$'
+        'interface_status': r'^(?P<port>Eth\d+/\d+)\s+(?P<name>.+?)\s+(?P<status>down|err-disabled|err-vlans|inactive|up|module \d{1,2}|sfpAbsent|connected|notconnec|noOperMem|disabled)\s+(?P<vlan>\S+)\s+(?P<duplex>\S+)\s+(?P<speed>\S+)\s+(?P<type>\S+)$'
     }
 
     interfaces = {}
@@ -242,7 +249,7 @@ def parse_nxos_show_interface_status(output):
 
 
 def parse_nxos_show_ip_route_all(output):
-    logging.debug('Parsing "show ip route all"...')
+    logging.info('Parsing "show ip route all"...')
 
     regex_map = {
         'route': re.compile(r'^([\d.]+/\d+),\s+(\d+)\s+ucast next-hops, (\d+)\s+mcast next-hops'),
@@ -368,68 +375,114 @@ def extract_txt_cmd_output(text, commands):
     return output
 
 
-def parse_text_file(filename, command_parsers):
+async def parse_text_file(filename, command_parsers):
     
-    with open(filename, 'r') as file:
-        content = file.read()
-        cmd_output = extract_txt_cmd_output(content, command_parsers.keys())
-        outputs = {}
-        for cmd, output in cmd_output.items():
-            parser = command_parsers.get(cmd)
-            if parser:
-                outputs[cmd] = parser(output)
+    async with aiofiles.open(filename, 'r') as file:
+        content = await file.read()
+        
+    cmd_output = extract_txt_cmd_output(content, command_parsers.keys())
+    outputs = {}
+    for cmd, output in cmd_output.items():
+        parser = command_parsers.get(cmd)
+        if parser:
+            outputs[cmd] = parser(output)
     
     return {filename: outputs}
 
 
-def write_txt(filename, data):
-    with open(filename, 'w') as f:
-        f.write(data)
-
-
-def write_json(data):
-    for address, output in data.items():
-        filename = f"{address.replace('.', '_')}.json"
-        with open(filename, 'w') as f:
-            json.dump(output, f, indent=4)
-
-
-async def connect_to_device(device, command_parsers):
+async def parse_device(device, command_parsers):
     try:
-        async with asyncssh.connect(
-            device['address'],
-            username=device['username'],
-            password=device['password']
-        ) as conn:
-            outputs = {}
-            for cmd, parser in command_parsers.items():
-                result = await conn.run(cmd, check=True)
-                outputs[cmd] = parser(result.stdout)
-            write_json({device['address']: outputs})
-    except (OSError, asyncssh.Error) as exc:
-        print(f"SSH connection failed for {device['address']}: {exc}")
+        host = device['address']
+        result = {}
+
+        # Determine device_type based on device['os_type']
+        if device['os_type'] == 'ios':
+            conn = AsyncIOSXEDriver(
+                host=device['address'],
+                auth_username=device['username'],
+                auth_password=device['password'],
+                auth_strict_key=False,
+                transport='asyncssh'
+            )
+            await conn.open()
+        elif device['os_type'] == 'nxos':
+            conn = AsyncNXOSDriver(
+                host=device['address'],
+                auth_username=device['username'],
+                auth_password=device['password'],
+                auth_strict_key=False,
+                transport='asyncssh'
+            )
+            await conn.open()
+        else:
+            raise ValueError(f"Unsupported OS type: {device['os_type']}")
+        
+        hostname_response = await conn.send_command("show hostname")
+        host = hostname_response.result
+        
+        for cmd in device['commands']:
+            response = await conn.send_command(cmd)
+            # Save command and result to a txt file
+            with open(f"{host}.txt", 'a') as file:
+                file.write(f"{cmd}\n")
+                file.write(f"{response.result}\n")
+            parser = command_parsers[cmd]
+            result[cmd] = parser(response.result)
+            
+        await conn.close()
+        
+    except Exception as exc:
+        print(f"SSH connection or command execution failed for {device['address']}: {exc}")
+        
+    return {host: result}
 
 
+def write_json(data_list):
+    for data in data_list:
+        for host, output in data.items():
+            filename = f"{host}.json"
+            with open(filename, 'w') as f:
+                json.dump(output, f, indent=4)
+
+
+def load_configuration(file_path):
+    """Load device configuration from a YAML file."""
+    with open(file_path, 'r') as file:
+        return yaml.safe_load(file)
+
+def process_device(device, command_parsers):
+    """Process a single device based on the provided configuration."""
+    if 'address' in device:
+        logging.info(f'Processing {device["address"]}...')
+    elif 'file' in device:
+        logging.info(f'Processing {device["file"]}...')
+    
+    os_type = device.get('os_type', 'nxos')  # default os_type is nxos
+    supported_commands = command_parsers.get(os_type, {})
+    for cmd in device['commands']:
+        if cmd not in supported_commands:
+            print(f"Command {cmd} is not supported for {os_type}")
+            exit(1)
+    if 'address' in device:
+        return parse_device(device, supported_commands)
+    elif 'file' in device:
+        return parse_text_file(device['file'], supported_commands)
+
+
+# Main function to orchestrate the parsing process
 async def main():
     
-    # Argument parser
-    parser = argparse.ArgumentParser(description="Network Device Parser")
-    parser.add_argument("os_type", choices=["ios", "nxos"], help="Operating system type of the network device.")
-    parser.add_argument("--file", help="Text file containing the output of the show commands.")
-    args = parser.parse_args()
-    
-    # Choose the appropriate parsers based on the OS type
-    if args.os_type == "nxos":
-        command_parsers = {
+    # command_parsers based on the OS type
+    command_parsers = {
+        'nxos': {
             'show version': parse_nxos_show_version,
             'show interface': parse_nxos_show_interface,
             'show interface trunk': parse_nxos_show_interface_trunk,
             'show vlan': parse_nxos_show_vlan,
             'show interface status': parse_nxos_show_interface_status,
             'show ip route all': parse_nxos_show_ip_route_all
-        }
-    elif args.os_type == "ios":
-        command_parsers = {
+        },
+        'ios': {
             'show version': parse_ios_show_version,
             'show interface': parse_ios_show_interface,
             'show interface trunk': parse_ios_show_interface_trunk,
@@ -437,19 +490,24 @@ async def main():
             'show interface status': parse_ios_show_interface_status,
             'show run': parse_ios_show_run
         }
-    
-    # If a text file is provided, parse the commands from the text file
-    if args.file:
-        outputs = parse_text_file(args.file, command_parsers)
-        write_json(outputs)
-    else:
-        devices = []
-        with open('devices.csv', mode='r') as file:
-            reader = csv.DictReader(file)
-            for row in reader:
-                devices.append(row)
-        tasks = [connect_to_device(device, command_parsers) for device in devices]
-        await asyncio.gather(*tasks)
+    }
+
+    config = load_configuration('devices-config.yaml')
+    tasks = []
+    if 'devices' in config:
+        # Process each device defined in the configuration
+        for device in config['devices']:
+            tasks.append(process_device(device, command_parsers))
+    # Gathering results from all the asynchronous tasks
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    outputs = []
+    for result in results:
+        if isinstance(result, Exception):
+            print(f"Error encountered during task: {result}")
+        else:
+            outputs.append(result)
+    # Write the parsed outputs to a JSON file
+    write_json(outputs)
 
 
 # Call the async main function
