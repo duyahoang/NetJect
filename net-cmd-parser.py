@@ -646,8 +646,7 @@ async def parse_output(cmd: str, response: Any, format: str, parser: Callable[[d
         try:
             json_resp = json.loads(response.result)
             if cmd in ["show interface trunk", "show vlan"]:
-                show_interface_trunk_json = await parse_table(json_resp)
-                return cmd, await zip_tables(show_interface_trunk_json)
+                return cmd, await zip_tables(await parse_table(json_resp))
             else:
                 return cmd, await parse_table(json_resp)
         except json.JSONDecodeError as e:
