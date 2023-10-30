@@ -791,6 +791,13 @@ async def process_device(device: dict, command_parsers: dict) -> Any:
     elif "file" in device:
         return await parse_text_file(device["file"], supported_commands)
 
+async def process_and_write(device: dict, command_parsers: dict):
+    try:
+        output = await process_device(device, command_parsers)
+    except Exception as e:
+        output = {"msg": e}
+    await write_json(output)
+    return output
 
 async def main():
 
@@ -833,7 +840,7 @@ async def main():
     tasks = []
     if "devices" in config:
         for device in config["devices"]:
-            tasks.append(process_device(device, command_parsers))
+            tasks.append(process_and_write(device, command_parsers))
     results = await asyncio.gather(*tasks, return_exceptions=True)
     outputs = []
     for result in results:
@@ -841,10 +848,18 @@ async def main():
             print(f"Error encountered during task: {result}")
         else:
             outputs.append(result)
-    for output in outputs:
-        await write_json(output)
+    # await write_list_json(outputs)
+    return outputs
+    
+
+async def write_list_json(list_json):
+    write_json_tasks = []
+    for data in list_json:
+        write_json_tasks.append(write_json(data))
+        await asyncio.gather(*write_json_tasks)
 
 
 # Call the async main function
 if __name__ == "__main__":
-    asyncio.run(main())
+    outputs = asyncio.run(main())
+    
