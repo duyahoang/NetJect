@@ -19,9 +19,9 @@ logging.basicConfig(
 
 
 def parse_nxos_show_version(cli_output: str) -> dict:
-    """Parses the CLI output of the show version command."""
+    """Parses the NXOS CLI output of the show version command."""
 
-    logging.info('Parsing "show version"...')
+    logging.info('Parsing nxos "show version"...')
 
     # Define regular expressions for the attributes
     regex_map = {
@@ -55,26 +55,28 @@ def parse_nxos_show_version(cli_output: str) -> dict:
 
 
 def parse_nxos_show_interface(cli_output: str) -> dict:
-    """Parses the CLI output of the show interface command."""
+    """Parses the NXOS CLI output of the show interface command."""
 
-    logging.info('Parsing "show interface"...')
+    logging.info('Parsing nxos "show interface"...')
 
+    # Define regular expressions for the attributes
     # Define regular expressions for the attributes
     regex_map = {
         "interface": r"(.+?) is (up|down)",
-        "admin_state": r"admin state is (up|down)",
+        "eth_bundle": r"Belongs to (\w+)",
         "hardware_address": r"Hardware:.+?address: (.+?) \(bia",
+        "description": r"Description: (.+)",
         "mtu": r"MTU (.+?) bytes",
         "bandwidth": r"BW (.+?) Kbit",
         "delay": r"DLY (.+?) usec",
         "reliability": r"reliability (.+?),",
         "txload": r"txload (.+?),",
         "rxload": r"rxload (.+?)",
-        "encapsulation": r"Encapsulation (.+?),",
-        "medium": r"medium is (.+)",
+        "encapsulation": r"Encapsulation (.+)",
         "port_mode": r"Port mode is (.+)",
         "duplex": r"(\w+-duplex)",
-        "speed": r"(\d+.+?b/s)",
+        "speed": r", (\d+ Gb/s),",
+        "medium": r"media type is (.+)",
         "input_rate_30_sec": r"30 seconds input rate (.+?) bits",
         "output_rate_30_sec": r"30 seconds output rate (.+?) bits",
         "input_rate_5_min": r"input rate (.+?) bps",
@@ -104,9 +106,9 @@ def parse_nxos_show_interface(cli_output: str) -> dict:
 
 
 def parse_nxos_show_interface_trunk(cli_output: str) -> dict:
-    """Parses the CLI output of the show interface trunk command."""
+    """Parses the NXOS CLI output of the show interface trunk command."""
 
-    logging.info('Parsing "show interface trunk"...')
+    logging.info('Parsing nxos "show interface trunk"...')
 
     # Regex patterns map
     regex_map = {
@@ -161,24 +163,27 @@ def parse_nxos_show_interface_trunk(cli_output: str) -> dict:
 
 
 def parse_nxos_show_vlan(cli_output: str) -> dict:
-    """Parses the CLI output of the show vlan command."""
+    """Parses the NXOS CLI output of the show vlan command."""
 
-    logging.info('Parsing "show vlan"...')
+    logging.info('Parsing nxos "show vlan"...')
 
     # Regex patterns map
     regex_map = {
+        "vlan_details_header": r"VLAN\s+Name\s+Status\s+Ports",
         "vlan_details": r"(?P<vlan_id>\d+)\s+(?P<vlan_name>\S+)\s+(?P<status>\S+)(?P<ports>[\w\s,/-]*)",
-        "vlan_type_mode": r"(?P<vlan_id>\d+)\s+(?P<type>\S+)\s+(?P<mode>\S+)",
+        "vlan_type_header": r"VLAN\s+Type\s+Vlan-mode",
+        "vlan_type_mode_index": r"(?P<vlan_id>\d+)\s+(?P<type>\S+)\s+(?P<mode>\S+)",
+        "remote_span_header": r"Primary\s+Secondary\s+Type\s+Ports",
         "remote_span": r"(?P<primary>\d+)\s+(?P<secondary>\d+)\s+(?P<type>\S+)\s+(?P<ports>[\w\s,/-]*)",
     }
 
     # Identify the start indices of each section based on headers
-    vlan_detail_index = cli_output.find("VLAN Name")
-    vlan_type_mode_index = cli_output.find("VLAN Type  Vlan-mode")
-    remote_span_index = cli_output.find("Remote SPAN VLANs")
+    vlan_details_index = re.search(regex_map["vlan_details_header"], cli_output).end()
+    vlan_type_mode_index = re.search(regex_map["vlan_type_mode_header"], cli_output).end()
+    remote_span_index = re.search(regex_map["remote_span_header"], cli_output).end()
 
     # Extract section strings
-    vlan_detail_string = cli_output[vlan_detail_index:vlan_type_mode_index]
+    vlan_detail_string = cli_output[vlan_details_index:vlan_type_mode_index]
     vlan_type_mode_string = cli_output[vlan_type_mode_index:remote_span_index]
     remote_span_string = cli_output[remote_span_index:]
 
@@ -234,35 +239,70 @@ def parse_nxos_show_vlan(cli_output: str) -> dict:
 
 
 def parse_nxos_show_interface_status(cli_output: str) -> dict:
-    """Parses the CLI output of the show interface status command."""
-
-    logging.info('Parsing "show interface status"...')
-
-    regex_map = {
-        "interface_status": r"^(?P<port>Eth\d+/\d+)\s+(?P<name>.+?)\s+(?P<status>down|err-disabled|err-vlans|inactive|up|module \d{1,2}|sfpAbsent|connected|notconnec|noOperMem|disabled)\s+(?P<vlan>\S+)\s+(?P<duplex>\S+)\s+(?P<speed>\S+)\s+(?P<type>\S+)$"
-    }
+    """Parses the NXOS CLI output of the show interface status command."""
+    
+    logging.info('Parsing nxos "show interface status"...')
 
     interfaces = {}
-    lines = cli_output.split("\n")
+    try:
+        regex_map = {
+            "interface_status_header": r"Port\s+Name\s+Status\s+Vlan\s+Duplex\s+Speed\s+Type",
+            "separator_line": r"^-+"
+        }
 
-    for line in lines:
-        match = re.search(regex_map["interface_status"], line)
-        if match:
-            port = match.group("port")
-            interfaces[port] = {
-                "Name": match.group("name"),
-                "Status": match.group("status"),
-                "Vlan": match.group("vlan"),
-                "Duplex": match.group("duplex"),
-                "Speed": match.group("speed"),
-                "Type": match.group("type"),
-            }
+        
+        lines = cli_output.split("\n")
+
+        # Identify header and column start indices
+        header_line = None
+        for line in lines:
+            if re.search(regex_map["interface_status_header"], line):
+                header_line = line
+                break
+
+        if not header_line:
+            logging.error("Header line not found!")
+            return {"msg":"Header line not found!"}
+
+        col_starts = {
+            "Port": header_line.index("Port"),
+            "Name": header_line.index("Name"),
+            "Status": header_line.index("Status"),
+            "Vlan": header_line.index("Vlan"),
+            "Duplex": header_line.index("Duplex"),
+            "Speed": header_line.index("Speed"),
+            "Type": header_line.index("Type")
+        }
+
+        for line in lines:
+            if re.search(regex_map["separator_line"], line):
+                continue
+            port = line[col_starts["Port"]:col_starts["Name"]].strip()
+            name = line[col_starts["Name"]:col_starts["Status"]].strip()
+            status = line[col_starts["Status"]:col_starts["Vlan"]].strip()
+            vlan = line[col_starts["Vlan"]:col_starts["Duplex"]].strip()
+            duplex = line[col_starts["Duplex"]:col_starts["Speed"]].strip()
+            speed = line[col_starts["Speed"]:col_starts["Type"]].strip()
+            int_type = line[col_starts["Type"]:].strip()
+
+            if port:  # If port value exists, then add to the dictionary
+                interfaces[port] = {
+                    "name": name,
+                    "status": status,
+                    "vlan": vlan,
+                    "duplex": duplex,
+                    "speed": speed,
+                    "type": int_type,
+                }
+                
+    except Exception as e:
+        interfaces["msg"] = f"{e}"
 
     return interfaces
 
 
 def parse_nxos_show_ip_route_vrf_all(cli_output: str) -> dict:
-    """Parses the CLI output of the show ip route vrf all command."""
+    """Parses the NXOS CLI output of the show ip route vrf all command."""
 
     return {"msg": "Not supported yet"}
     logging.info('Parsing "show ip route vrf all"...')
@@ -305,183 +345,682 @@ def parse_nxos_show_ip_route_vrf_all(cli_output: str) -> dict:
 
 
 def parse_nxos_show_system_resources(cli_output: str) -> dict:
-    """Parses the CLI output of the show system resources command."""
+    """Parses the NXOS CLI output of the show system resources command."""
 
     return {"msg": "Not supported yet"}
 
 
 def parse_nxos_show_spanning_tree(cli_output: str) -> dict:
-    """Parses the CLI output of the show spanning tree command."""
+    """Parses the NXOS CLI output of the show spanning tree command."""
 
     return {"msg": "Not supported yet"}
 
 
 def parse_nxos_show_vpc(cli_output: str) -> dict:
-    """Parses the CLI output of the show vpc command."""
+    """Parses the NXOS CLI output of the show vpc command."""
 
     return {"msg": "Not supported yet"}
 
 
 def parse_nxos_show_vpc_role(cli_output: str) -> dict:
-    """Parses the CLI output of the show vpc role command."""
+    """Parses the NXOS CLI output of the show vpc role command."""
 
     return {"msg": "Not supported yet"}
 
 
 def parse_nxos_show_cons_para_global(cli_output: str) -> dict:
-    """Parses the CLI output of the show cons para global command."""
+    """Parses the NXOS CLI output of the show cons para global command."""
 
     return {"msg": "Not supported yet"}
 
 
 def parse_nxos_show_port_channel_summary(cli_output: str) -> dict:
-    """Parses the CLI output of the show port channel summary command."""
+    """Parses the NXOS CLI output of the show port channel summary command."""
 
     return {"msg": "Not supported yet"}
 
 
 def parse_nxos_show_cdp_neighbor(cli_output: str) -> dict:
-    """Parses the CLI output of the show cdp neighbor command."""
+    """Parses the NXOS CLI output of the show cdp neighbor command."""
 
-    return {"msg": "Not supported yet"}
+    logging.info('Parsing nxos "show cdp neighbors"...')
+
+    try:
+        # Extract capability codes and their full names using regex
+        capability_mapping = {}
+        capability_pattern = re.compile(r"([A-Za-z]) - ([ \w-]+)")
+        matches = capability_pattern.findall(cli_output)
+        for code, name in matches:
+            capability_mapping[code] = name.strip()
+
+        regex_map = {
+            "only_nei_info": r"\s+(?P<local_int>[/\w ]+?)\s+(?P<holdtime>\d+)\s+(?P<capability>[A-Z ]+)\s+(?P<platform>\S+)\s+(?P<port_id>[/\w ]+)",
+            "only_device_id": r"^(?P<device_id>\S+)$",
+            "full_info": r"^(?P<device_id>\S+)\s+(?P<local_int>[/\w ]+?)\s+(?P<holdtime>\d+)\s+(?P<capability>[A-Z ]+)\s+(?P<platform>\S+)\s+(?P<port_id>[/\w ]+)"
+        }
+
+        neighbors = {}
+        lines = cli_output.split("\n")
+        i = 0
+        while i < len(lines):
+            # Skip empty lines
+            if not lines[i].strip():
+                i += 1
+                continue
+            lines[i] = lines[i].rstrip()
+            match = re.search(regex_map["full_info"], lines[i])
+            if match:
+                capability_list = [capability_mapping[code] for code in match.group("capability").strip().split() if code in capability_mapping] 
+                capability = ", ".join(capability_list)
+                neighbors[match.group("device_id")] = {
+                    "local_interface": match.group("local_int").strip(),
+                    "holdtime": match.group("holdtime"),
+                    "capability": capability,
+                    "platform": match.group("platform"),
+                    "port_id": match.group("port_id")
+                }
+            else:
+                match_device_id = re.search(regex_map["only_device_id"], lines[i])
+                if match_device_id and i + 1 < len(lines):
+                    i = i + 1
+                    lines[i] = lines[i].rstrip()
+                    match_info = re.search(regex_map["only_nei_info"], lines[i])
+                    if match_info:
+                        capability_list = [capability_mapping[code] for code in match_info.group("capability").strip().split() if code in capability_mapping] 
+                        capability = ", ".join(capability_list)
+                        neighbors[match_device_id.group("device_id")] = {
+                            "local_interface": match_info.group("local_int").strip(),
+                            "holdtime": match_info.group("holdtime"),
+                            "capability": capability,
+                            "platform": match_info.group("platform"),
+                            "port_id": match_info.group("port_id")
+                        }
+            i = i + 1
+
+    except Exception as e:
+        return {"error": f"{e}"}
+
+    return neighbors
 
 
 def parse_nxos_show_forwarding_adjacency(cli_output: str) -> dict:
-    """Parses the CLI output of the show forwarding adjacency command."""
+    """Parses the NXOS CLI output of the show forwarding adjacency command."""
 
     return {"msg": "Not supported yet"}
 
 
 def parse_nxos_show_ip_arp(cli_output: str) -> dict:
-    """Parses the CLI output of the show ip arp command."""
+    """Parses the NXOS CLI output of the show ip arp command."""
 
     return {"msg": "Not supported yet"}
 
 
 def parse_nxos_show_mac_address_table(cli_output: str) -> dict:
-    """Parses the CLI output of the show mac address table command."""
+    """Parses the NXOS CLI output of the show mac address table command."""
 
     return {"msg": "Not supported yet"}
 
 
 def parse_nxos_show_ip_bgp_summary(cli_output: str) -> dict:
-    """Parses the CLI output of the show ip bgp summary command."""
+    """Parses the NXOS CLI output of the show ip bgp summary command."""
 
     return {"msg": "Not supported yet"}
 
 
 def parse_nxos_show_ip_ospf_neighbor(cli_output: str) -> dict:
-    """Parses the CLI output of the show ip ospf neighbor command."""
+    """Parses the NXOS CLI output of the show ip ospf neighbor command."""
 
     return {"msg": "Not supported yet"}
 
 
 def parse_nxos_show_ip_pim_neighbor(cli_output: str) -> dict:
-    """Parses the CLI output of the show ip pim neighbor command."""
+    """Parses the NXOS CLI output of the show ip pim neighbor command."""
 
     return {"msg": "Not supported yet"}
 
 
 def parse_nxos_show_hsrp(cli_output: str) -> dict:
-    """Parses the CLI output of the show hsrp command."""
+    """Parses the NXOS CLI output of the show hsrp command."""
 
     return {"msg": "Not supported yet"}
 
 
 def parse_nxos_show_policy_map_int_ctrl_plane(cli_output: str) -> dict:
-    """Parses the CLI output of the show policy map int ctrl plane command."""
+    """Parses the NXOS CLI output of the show policy map int ctrl plane command."""
 
     return {"msg": "Not supported yet"}
 
 
 # New IOS parsers (only definition and arguments)
 def parse_ios_show_version(cli_output: str) -> dict:
-    """Parses the CLI output of the show version command."""
+    """Parses the IOS CLI output of the show version command."""
 
-    return {"msg": "Not supported yet"}
+    logging.info('Parsing ios "show version"...')
+    try:
+        # Define regular expressions for the attributes
+        regex_map = {
+            "version": r"Cisco IOS Software, (.+?), RELEASE SOFTWARE",
+            "rom": r"ROM: (.+?), RELEASE SOFTWARE",
+            "system_image_file": r"System image file is: (.+)",
+            "platform": r"(Cisco.+Intel.+)"
+        }
+
+        result = {}
+        for key, regex in regex_map.items():
+            match = re.search(regex, cli_output, re.MULTILINE)
+            if match:
+                result[key] = match.group(1)
+
+    except Exception as e:
+        return {"error": f"{e}"}
+    
+    return result
 
 
 def parse_ios_show_interface(cli_output: str) -> dict:
-    """Parses the CLI output of the show interface command."""
+    """Parses the IOS CLI output of the show interface command."""
 
-    return {"msg": "Not supported yet"}
+    logging.info('Parsing ios "show interface"...')
+    try:
+        # Define regular expressions for the attributes
+        regex_map = {
+            "interface": r"(.+?) is (up|down), line protocol is (.+?) (.+?)",
+            "hardware_address": r"Hardware is .+?address is (.+?) \(bia",
+            "internet_address": r"Internet address is (.+)",
+            "description": r"Description: (.+)",
+            "mtu": r"MTU (.+?) bytes",
+            "bandwidth": r"BW (.+?) Kbit",
+            "delay": r"DLY (.+?) usec",
+            "reliability": r"reliability (.+?),",
+            "txload": r"txload (.+?),",
+            "rxload": r"rxload (.+?)",
+            "encapsulation": r"Encapsulation (.+)",
+            "eth_mode": r"Port mode is (.+)",
+            "duplex": r"(\w+-duplex)",
+            "speed": r", (\d+ Gb/s),",
+            "media": r"media type is (.+)",
+        }
+
+        result = {"interfaces": {}}
+        current_interface = ""
+
+        for line in cli_output.split("\n"):
+            if not line.strip():
+                continue
+            if "is up" in line or "is down" in line:
+                match = re.search(regex_map["interface"], line)
+                if match:
+                    current_interface = match.group(1)
+                    result["interfaces"][current_interface] = {"status": match.group(2)}
+                    result["interfaces"][current_interface]["protocol_status"] = match.group(3)
+                    result["interfaces"][current_interface]["physical_status"] = match.group(4)
+                    continue
+            for key, regex in regex_map.items():
+                match = re.search(regex, line)
+                if match and current_interface:
+                    result["interfaces"][current_interface][key] = match.group(1)
+    
+    except Exception as e:
+        result = {"error": f"{e}"}
+    
+    return result
 
 
 def parse_ios_show_interface_trunk(cli_output: str) -> dict:
-    """Parses the CLI output of the show interface trunk command."""
+    """Parses the IOS CLI output of the show interface trunk command."""
 
-    return {"msg": "Not supported yet"}
+    logging.info('Parsing ios "show interface trunk"...')
+    result = {}
+    try:
+        # Regex patterns map
+        regex_map = {
+            "port_details_header": r"Port\s+Mode\s+Encapsulation\s+Status\s+Native vlan",
+            "port_details": r"(?P<port>\S+)\s+(?P<mode>\S)\s+(?P<encapsulation>\S)\s+(?P<status>\S+)\s+(?P<native_vlan>\d+)",
+            "vlans_allowed_header": r"Port\s+Vlans allowed on trunk",
+            "vlans_allowed": r"(?P<port>\S+)\s+(?P<vlans_allowed>[\d,-]+)",
+            "vlans_allowed_mgmt_header": r"Port\s+Vlans allowed and active in management domain",
+            "vlans_allowed_mgmt": r"(?P<port>\S+)\s+(?P<vlans_allowed_mgmt>[\d,-]+)",
+            "vlans_stp_forwarding_header": r"Port\s+Vlans in spanning tree forwarding state and not pruned",
+            "vlan_stp_forwarding": r"(?P<port>\S+)\s+(?P<vlans_stp>[\d,-]+)",
+        }
+
+        # Identify the start indices of each section based on headers
+        port_details_index = re.search(regex_map["port_details_header"], cli_output).end()
+        vlans_allowed_index = re.search(regex_map["vlans_allowed_header"], cli_output).end()
+        vlans_allowed_mgmt_index = re.search(regex_map["vlans_allowed_mgmt_header"], cli_output).end()
+        vlans_stp_forwarding_index = re.search(regex_map["vlans_stp_forwarding_header"], cli_output).end()
+
+        # Extract section strings
+        port_details_string = cli_output[port_details_index:vlans_allowed_index]
+        vlans_allowed_string = cli_output[vlans_allowed_index:vlans_allowed_mgmt_index]
+        vlans_allowed_mgmt_string = cli_output[vlans_allowed_mgmt_index:vlans_stp_forwarding_index]
+        vlans_stp_forwarding_string = cli_output[vlans_stp_forwarding_index:]
+
+        # Parse port details section
+        for match in re.finditer(regex_map["port_details"], port_details_string):
+            port = match.group("port")
+            result[port] = {
+                "mode": match.group("mode"),
+                "encapsulation": match.group("encapsulation"),
+                "Status": match.group("status"),
+                "native_vlan": match.group("native_vlan"),
+            }
+
+        # Parse VLANs allowed section
+        for match in re.finditer(regex_map["vlans_allowed"], vlans_allowed_string):
+            port = match.group("port")
+            if port in result:
+                result[port]["vlans_allowed"] = match.group("vlans_allowed")
+            else:
+                result[port] = {"vlans_allowed": match.group("vlans_allowed")}
+
+        # Parse VLANs allowed and active in management domain
+        for match in re.finditer(regex_map["vlans_allowed_mgmt"], vlans_allowed_mgmt_string):
+            port = match.group("port")
+            if port in result:
+                result[port]["vlans_allowed_mgmt"] = match.group("vlans_allowed_mgmt")
+            else:
+                result[port] = {"vlans_allowed_mgmt": match.group("vlans_allowed_mgmt")}
+
+        # Parse STP Forwarding section
+        for match in re.finditer(regex_map["vlan_stp_forwarding"], vlans_stp_forwarding_string):
+            port = match.group("port")
+            if port in result:
+                result[port]["vlans_stp_forwarding"] = match.group("vlans_stp")
+            else:
+                result[port] = {"vlans_stp_forwarding": match.group("vlans_stp")}
+
+        # If no attribute, assign empty string
+        for port in result:
+            if "mode" not in port:
+                result[port]["mode"] = ""
+            if "encapsulation" not in port:
+                result[port]["encapsulation"] = ""
+            if "Status" not in port:
+                result[port]["Status"] = ""
+            if "native_vlan" not in port:
+                result[port]["native_vlan"] = ""
+            if "vlans_allowed" not in port:
+                result[port]["vlans_allowed"] = ""
+            if "vlans_allowed_mgmt" not in port:
+                result[port]["vlans_allowed_mgmt"] = ""
+            if "vlans_stp_forwarding" not in port:
+                result[port]["vlans_stp_forwarding"] = ""
+
+    except Exception as e:
+        result["error"] = f"{e}"
+
+    return result
 
 
 def parse_ios_show_vlan(cli_output: str) -> dict:
-    """Parses the CLI output of the show vlan command."""
+    """Parses the IOS CLI output of the show vlan command."""
 
-    return {"msg": "Not supported yet"}
+    logging.info('Parsing ios "show vlan"...')
+    vlan_data = {}
+    try:
+        # Regex patterns map
+        regex_map = {
+            "vlan_details_header": r"VLAN\s+Name\s+Status\s+Ports",
+            "vlan_details": r"(?P<vlan_id>\d+)\s+(?P<vlan_name>\S+)\s+(?P<status>\S+)(?P<ports>[\w\s,/-]*)",
+            "vlan_more_header": r"VLAN\s+Type\s+SAID\s+MTU\s+Parent\s+RingNo\s+BridgeNo\s+Stp\s+BrdgMode\s+Trans1\s+Trans2",
+            "vlan_more": r"(?P<vlan_id>\d+)\s+(?P<type>\S+)\s+(?P<said>\d+)\s+(?P<mtu>\d+)\s+(?P<parent>\S+)\s+(?P<ringno>\S+)\s+(?P<bridgeno>\S+)\s+(?P<stp>\S+)\s+(?P<brdgmode>\S+)\s+(?P<trans1>\d+)\s+(?P<trans2>\S+)",
+        }
+
+        # Identify the start indices of each section based on headers
+        vlan_details_index = re.search(regex_map["vlan_details_header"], cli_output).end()
+        vlan_more_index = re.search(regex_map["vlan_more_header"], cli_output).end()
+
+        # Extract section strings
+        vlan_details_string = cli_output[vlan_details_index:vlan_more_index]
+        vlan_more_string = cli_output[vlan_more_index:]
+
+        # Variable to hold current VLAN ID
+        current_vlan = None
+
+        # Parse VLAN details with ports mapping
+        for line in vlan_details_string.splitlines():
+            match = re.search(regex_map["vlan_details"], line)
+            if match:
+                current_vlan = match.group("vlan_id")
+                ports_list = match.group("ports").strip().split(", ")
+                # Ensure that empty strings are not included in the Ports list
+                ports_list = [port for port in ports_list if port]
+                vlan_data[current_vlan] = {
+                    "vlan_name": match.group("vlan_name"),
+                    "status": match.group("status"),
+                    "ports": ports_list,
+                }
+            elif current_vlan and line.strip():
+                # Continuation lines for the ports of a VLAN
+                ports = line.strip().split(", ")
+                ports = [port for port in ports if port]
+                vlan_data[current_vlan]["Ports"].extend(ports)
+
+        # Parse more info of VLAN
+        for line in vlan_more_string.splitlines():
+            match = re.search(regex_map["vlan_more"], line)
+            if match:
+                vlan_id = match.group("vlan_id")
+                if vlan_id not in vlan_data:  # Ensure the VLAN ID exists in the data
+                    vlan_data[vlan_id] = {}
+                vlan_data[vlan_id].update(
+                    {
+                        "type": match.group("type"),
+                        "said": match.group("said"),
+                        "mtu": match.group("mtu"),
+                        "parent": match.group("parent"),
+                        "ringno": match.group("ringno"),
+                        "bridgeno": match.group("bridgeno"),
+                        "stp": match.group("stp"),
+                        "brdgmode": match.group("brdgmode"),
+                        "trans1": match.group("trans1"),
+                        "trans2": match.group("trans2"),
+                    }
+                )
+
+    except Exception as e:
+        vlan_data["error"] = f"{e}"
+    return vlan_data
 
 
 def parse_ios_show_interface_status(cli_output: str) -> dict:
-    """Parses the CLI output of the show interface status command."""
+    """Parses the IOS CLI output of the show interface status command."""
 
-    return {"msg": "Not supported yet"}
+    logging.info('Parsing ios "show interface status"...')
+
+    interfaces = {}
+    try:
+        regex_map = {
+            "interface_status_header": r"Port\s+Name\s+Status\s+Vlan\s+Duplex\s+Speed\s+Type",
+            "separator_line": r"^-+"
+        }
+
+        
+        lines = cli_output.split("\n")
+
+        # Identify header and column start indices
+        header_line = None
+        for line in lines:
+            if re.search(regex_map["interface_status_header"], line):
+                header_line = line
+                break
+
+        if not header_line:
+            logging.error("Header line not found!")
+            return {"msg":"Header line not found!"}
+
+        col_starts = {
+            "Port": header_line.index("Port"),
+            "Name": header_line.index("Name"),
+            "Status": header_line.index("Status"),
+            "Vlan": header_line.index("Vlan"),
+            "Duplex": header_line.index("Duplex"),
+            "Speed": header_line.index("Speed"),
+            "Type": header_line.index("Type")
+        }
+
+        for line in lines:
+            if re.search(regex_map["separator_line"], line):
+                continue
+            port = line[col_starts["Port"]:col_starts["Name"]].strip()
+            name = line[col_starts["Name"]:col_starts["Status"]].strip()
+            status = line[col_starts["Status"]:col_starts["Vlan"]].strip()
+            vlan = line[col_starts["Vlan"]:col_starts["Duplex"]].strip()
+            duplex = line[col_starts["Duplex"]:col_starts["Speed"]].strip()
+            speed = line[col_starts["Speed"]:col_starts["Type"]].strip()
+            int_type = line[col_starts["Type"]:].strip()
+
+            if port:  # If port value exists, then add to the dictionary
+                interfaces[port] = {
+                    "name": name,
+                    "status": status,
+                    "vlan": vlan,
+                    "duplex": duplex,
+                    "speed": speed,
+                    "type": int_type,
+                }
+                
+    except Exception as e:
+        interfaces["errpr"] = f"{e}"
+
+    return interfaces
+
+
+def parse_ios_show_cdp_neighbors(cli_output: str) -> dict:
+    """Parses the IOS CLI output of the show cdp neighbors command."""
+    
+    logging.info('Parsing ios "show cdp neighbors"...')
+
+    try:
+        # Extract capability codes and their full names using regex
+        capability_mapping = {}
+        capability_pattern = re.compile(r"([A-Za-z]) - ([ \w-]+)")
+        matches = capability_pattern.findall(cli_output)
+        for code, name in matches:
+            capability_mapping[code] = name.strip()
+
+        regex_map = {
+            "only_nei_info": r"\s+(?P<local_int>[/\w ]+?)\s+(?P<holdtime>\d+)\s+(?P<capability>[A-Z ]+)\s+(?P<platform>\S+)\s+(?P<port_id>[/\w ]+)",
+            "only_device_id": r"^(?P<device_id>\S+)$",
+            "full_info": r"^(?P<device_id>\S+)\s+(?P<local_int>[/\w ]+?)\s+(?P<holdtime>\d+)\s+(?P<capability>[A-Z ]+)\s+(?P<platform>\S+)\s+(?P<port_id>[/\w ]+)"
+        }
+
+        neighbors = {}
+        lines = cli_output.split("\n")
+        i = 0
+        while i < len(lines):
+            # Skip empty lines
+            if not lines[i].strip():
+                i += 1
+                continue
+            lines[i] = lines[i].rstrip()
+            match = re.search(regex_map["full_info"], lines[i])
+            if match:
+                capability_list = [capability_mapping[code] for code in match.group("capability").strip().split() if code in capability_mapping] 
+                capability = ", ".join(capability_list)
+                neighbors[match.group("device_id")] = {
+                    "local_interface": match.group("local_int").strip(),
+                    "holdtime": match.group("holdtime"),
+                    "capability": capability,
+                    "platform": match.group("platform"),
+                    "port_id": match.group("port_id")
+                }
+            else:
+                match_device_id = re.search(regex_map["only_device_id"], lines[i])
+                if match_device_id and i + 1 < len(lines):
+                    i = i + 1
+                    lines[i] = lines[i].rstrip()
+                    match_info = re.search(regex_map["only_nei_info"], lines[i])
+                    if match_info:
+                        capability_list = [capability_mapping[code] for code in match_info.group("capability").strip().split() if code in capability_mapping] 
+                        capability = ", ".join(capability_list)
+                        neighbors[match_device_id.group("device_id")] = {
+                            "local_interface": match_info.group("local_int").strip(),
+                            "holdtime": match_info.group("holdtime"),
+                            "capability": capability,
+                            "platform": match_info.group("platform"),
+                            "port_id": match_info.group("port_id")
+                        }
+            i = i + 1
+
+    except Exception as e:
+        return {"error": f"{e}"}
+
+    return neighbors
+
+
+def parse_ios_show_ip_arp(cli_output: str) -> list:
+    """Parses the IOS CLI output of the show ip arp command."""
+    
+    logging.info('Parsing ios "show ip arp"...')
+
+    try:
+        ip_arp_list = []
+        # Define regular expressions for the attributes
+        regex_map = {
+            "ip_arp_details": r"(?P<protocol>\S+)\s+(?P<address>\d+\.\d+\.\d+\.\d+)\s+(?P<age>\S+)\s+(?P<hardware_address>\S+)\s+(?P<type>\S+)\s+(?P<interface>\S+)",
+        }
+
+        lines = cli_output.split("\n")
+
+        for line in lines:
+            match = re.search(regex_map["ip_arp_details"], line)
+            if match:
+                ip_arp_list.append({
+                    "protocol": match.group("protocol"),
+                    "address": match.group("address"),
+                    "age": match.group("age"),
+                    "hardware_address": match.group("hardware_address"),
+                    "type": match.group("type"),
+                    "interface": match.group("interface"),
+                    })
+                
+    except Exception as e:
+        return [{"error": f"{e}"}]
+    
+    return ip_arp_list
+
+
+def parse_ios_show_mac_address_table(cli_output: str) -> dict:
+    """Parses the IOS CLI output of the show mac address-table command."""
+
+    logging.info('Parsing ios "show mac address-table"...')
+
+    try:
+        mac_table = {}
+        # Define regular expressions for the attributes
+        regex_map = {
+            "mac_details": r"(?P<vlan>\d+)\s+(?P<mac>\S+)\s+(?P<type>\S+)\s+(?P<learn>\S+)\s+(?P<age>\S+)\s+(?P<ports>[\w\s,/-]*)",
+        }
+
+        lines = cli_output.split("\n")
+
+        for line in lines:
+            match = re.search(regex_map["mac_details"], line)
+            if match:
+                mac = match.group("mac")
+                mac_table[mac] = {
+                    "vlan": match.group("vlan"),
+                    "type": match.group("type"),
+                    "learn": match.group("learn"),
+                    "age": match.group("age"),
+                    "ports": match.group("ports").strip(),
+                    }
+                
+    except Exception as e:
+        return {"error": f"{e}"}
+    
+    return mac_table
+
+
+def parse_ios_show_ip_route(cli_output: str) -> dict:
+    """Parses the IOS CLI output of the show ip route command."""
+
+    logging.info('Parsing ios "show ip route"...')
+
+    try:
+        codes_mapping = {}
+        codes_pattern = re.compile(r"([\w*+%]+) - ([-\w\ ]+)")
+        matches = codes_pattern.findall(cli_output)
+        for code, name in matches:
+            codes_mapping[code] = name.strip()
+
+        route_pattern = re.compile(
+                r"^(?P<codes>[\S\s]+?)\s+(?P<prefix>\d+\.\d+\.\d+\.\d+/\d+)"
+                r"(?:\s+\[(?P<preference>\d+)/(?P<metric>\d+)\])?"
+                r"\s+(?:via\s+(?P<next_hop>[\d\.]+)|(?P<directly_connected>is directly connected)),?"
+                r"(?:\s+.*,)?\s+(?P<interface>\S+)"
+            )
+
+        routes = {}
+        for line in cli_output.split("\n"):
+            match = route_pattern.search(line)
+            if match:
+                prefix = match.group("prefix")
+                codes_list = []
+                codes_str = match.group("codes").strip()
+                for code in codes_str.split():
+                    code = code.strip()
+                    if code:
+                        if "*" in code:
+                            codes_list.append(codes_mapping.get("*", "*"))
+                            code = code.replace("*", "")
+                        codes_list.append(codes_mapping.get(code, code))
+                next_hop = match.group("next_hop") or match.group("directly_connected")
+
+                routes[prefix] = {
+                    "codes": codes_list,
+                    "preference": match.group("preference") or "",
+                    "metric": match.group("metric") or "",
+                    "next_hop": next_hop,
+                    "interface": match.group("interface")
+                }
+    
+    except Exception as e:
+        return {"error": f"{e}"}
+    
+    return routes
 
 
 def parse_ios_show_run_interface(cli_output: str) -> dict:
-    """Parses the CLI output of the show run interface command."""
+    """Parses the IOS CLI output of the show run interface command."""
 
-    return {"msg": "Not supported yet"}
-   # Regular expressions for each attribute
-    regex_map = {
-        "interface": re.compile(r"^interface (\S+)"),
-        "description": re.compile(r"^ description (.+)"),
-        "switchport_mode": re.compile(r"^ switchport mode (\S+)"),
-        "switchport_trunk_allowed_vlan": re.compile(
-            r"^ switch port trunk allowed vlan (.+)"
-        ),
-        "switchport_trunk_allowed_vlan_add": re.compile(
-            r"^ switchport trunk allowed vlan add (.+)"
-        ),
-        "no_switchport": re.compile(r"^ no switchport"),
-        "no_ip_address": re.compile(r"^ no IP address"),
-        "switch_virtual_link": re.compile(r"^ switch virtual link (\d+)"),
-        "login_event_link_status": re.compile(r"^ login event link-status"),
-        "channel_group": re.compile(r"^ channel-group (\d+) mode (\S+)"),
-    }
-
-    # Initialize a dictionary to hold the parsed data
+    logging.info('Parsing ios "show run interface"...')
     interfaces = {}
-    current_interface = ""
+    try:
+    # Regular expressions for each attribute
+        regex_map = {
+            "interface": re.compile(r"^interface (\S+)"),
+            "description": re.compile(r"^ description (.+)"),
+            "switchport_mode": re.compile(r"^ switchport mode (\S+)"),
+            "switchport_trunk_allowed_vlan": re.compile(
+                r"^ switch port trunk allowed vlan (.+)"
+            ),
+            "switchport_trunk_allowed_vlan_add": re.compile(
+                r"^ switchport trunk allowed vlan add (.+)"
+            ),
+            "no_switchport": re.compile(r"^ no switchport"),
+            "no_ip_address": re.compile(r"^ no IP address"),
+            "switch_virtual_link": re.compile(r"^ switch virtual link (\d+)"),
+            "login_event_link_status": re.compile(r"^ login event link-status"),
+            "channel_group": re.compile(r"^ channel-group (\d+) mode (\S+)"),
+        }
 
-    # Split the output into lines and loop through each line
-    for line in output.split("\n"):
-        interface_match = regex_map["interface"].match(line)
-        if interface_match:
-            current_interface = interface_match.group(1)
-            interfaces[current_interface] = {}
-            continue
+        current_interface = ""
 
-        # If inside an interface configuration section, search for attributes
-        if current_interface:
-            for attr, regex in regex_map.items():
-                if attr == "interface":
-                    continue
-                match = regex.match(line)
-                if match:
-                    if attr in [
-                        "switchport_trunk_allowed_vlan",
-                        "switchport_trunk_allowed_vlan_add",
-                    ]:
-                        # Add the allowed vlans to the list
-                        vlans = match.group(1)
-                        if "allowed_vlans" in interfaces[current_interface]:
-                            interfaces[current_interface]["allowed_vlans"] += (
-                                "," + vlans
-                            )
+        # Split the output into lines and loop through each line
+        for line in cli_output.split("\n"):
+            interface_match = regex_map["interface"].match(line)
+            if interface_match:
+                current_interface = interface_match.group(1)
+                interfaces[current_interface] = {}
+                continue
+
+            # If inside an interface configuration section, search for attributes
+            if current_interface:
+                for attr, regex in regex_map.items():
+                    if attr == "interface":
+                        continue
+                    match = regex.match(line)
+                    if match:
+                        if attr in [
+                            "switchport_trunk_allowed_vlan",
+                            "switchport_trunk_allowed_vlan_add",
+                        ]:
+                            # Add the allowed vlans to the list
+                            vlans = match.group(1)
+                            if "allowed_vlans" in interfaces[current_interface]:
+                                interfaces[current_interface]["allowed_vlans"] += (
+                                    "," + vlans
+                                )
+                            else:
+                                interfaces[current_interface]["allowed_vlans"] = vlans
                         else:
-                            interfaces[current_interface]["allowed_vlans"] = vlans
-                    else:
-                        interfaces[current_interface][attr] = match.group(1)
-
-    return {"show run": interfaces}
+                            interfaces[current_interface][attr] = match.group(1)
+    except Exception as e:
+        interfaces["msg"] = e
+    return interfaces
 
 
 def extract_txt_cmd_output(text: str, commands: list) -> dict:
@@ -511,19 +1050,25 @@ def extract_txt_cmd_output(text: str, commands: list) -> dict:
     return output
 
 
-async def parse_text_file(filename: str, command_parsers: dict) -> dict:
+async def parse_text_file(device: dict, command_parsers: dict) -> dict:
     """Parses the text file that contain show commands and their output."""
 
+    filename = device["file"]
     logging.info(f'Extracting show commands from {filename} txt file...')
     async with aiofiles.open(filename, "r") as file:
         content = await file.read()
 
     cmd_output = extract_txt_cmd_output(content, command_parsers.keys())
+    
     outputs = {}
+    parse_output_tasks = []
     for cmd, output in cmd_output.items():
-        parser = command_parsers.get(cmd)
-        if parser:
-            outputs[cmd] = parser(output)
+        if cmd in device["commands"]: 
+            parse_output_tasks.append(parse_output(cmd, output, device["cli_output_format"], command_parsers.get(cmd)))
+
+    parsed_outputs = await asyncio.gather(*parse_output_tasks)
+    for cmd, parsed_output in parsed_outputs:
+        outputs[cmd] = parsed_output
 
     return {filename: outputs}
 
@@ -638,22 +1183,23 @@ async def zip_tables(data: dict) -> dict:
     return zipped_dicts
 
 
-async def parse_output(cmd: str, response: Any, format: str, parser: Callable[[dict], dict]) -> (str, dict):
+async def parse_output(cmd: str, output: str or dict, format: str, parser: Callable[[dict], dict]) -> (str, dict):
     """Parses the output of specifc show command."""
 
     logging.info(f'Parsing the output of {cmd}...')
-    if format == "json":
-        try:
-            json_resp = json.loads(response.result)
+
+    try:
+
+        if format == "json":
             if cmd in ["show interface trunk", "show vlan"]:
-                return cmd, await zip_tables(await parse_table(json_resp))
+                return cmd, await zip_tables(await parse_table(output))
             else:
-                return cmd, await parse_table(json_resp)
-        except json.JSONDecodeError as e:
-            logging.error(f'Command {cmd} output is not in JSON format.')
-            return cmd, {"output": response.result, "msg": "The output is not in JSON format."}
-    elif format == "cli-text":
-        return cmd, parser(response.result)
+                return cmd, await parse_table(output)
+        elif format == "cli-text":
+            return cmd, parser(output)
+        
+    except Exception as e:
+        return cmd, {"msg": f"Failed to parse the output from {cmd}","error": f"{e}"}
     
 
 async def parse_device(device: dict, command_parsers: dict) -> dict:
@@ -663,7 +1209,7 @@ async def parse_device(device: dict, command_parsers: dict) -> dict:
     if "password" not in device:
         device["password"] = getpass.getpass(prompt=f"Device {host}\nEnter the password: ")
 
-    result = {}
+    cmd_out = {}
     try:
         if device["os_type"] == "ios":
             conn = AsyncIOSXEDriver(
@@ -688,16 +1234,24 @@ async def parse_device(device: dict, command_parsers: dict) -> dict:
 
         hostname_response = await conn.send_command("show hostname")
         host = hostname_response.result
-
+        result = {host: {}}
         cli_output_format = device.get("cli_output_format", "json")
+        if device['os_type'] == 'ios' and cli_output_format == 'json':
+            raise ValueError(f"Cisco IOS does not support JSON output format")
+        
         parse_output_tasks = []
         for cmd in device["commands"]:
             response = await conn.send_command(cmd if format == "cli-text" else f"{cmd} | json")
-            parse_output_tasks.append(parse_output(cmd, response, cli_output_format, command_parsers.get(cmd)))
-
+            try:
+                json_resp = json.loads(response.result)
+                parse_output_tasks.append(parse_output(cmd, json_resp, cli_output_format, command_parsers.get(cmd)))
+            except json.JSONDecodeError:
+                logging.error(f'Command {cmd} CLI output is not in JSON format.')
+                result[host].update({cmd: {"output": response.result, "msg": "The CLI output is not in JSON format."}})
+            
         parsed_outputs = await asyncio.gather(*parse_output_tasks)
         for cmd, parsed_output in parsed_outputs:
-            result[cmd] = parsed_output
+            cmd_out[cmd] = parsed_output
 
         # Save outputs to a file
         for cmd in device["commands"]:
@@ -713,15 +1267,16 @@ async def parse_device(device: dict, command_parsers: dict) -> dict:
         logging.error(f"Error encountered during establishing SSH and parsing for {device['address']}: {exc}")
         return {host: {"error": f"Failed to parse device: {exc}"}}
     
+    result[host].update(cmd_out)
     logging.info(f'Finish parsing {host}...')
-    return {host: result}
-
+    return result
 
 async def write_json(data: dict):
     """Asynchronously write data to a JSON file."""
 
     for host, _ in data.items():
         filename = f"{host}.json"
+
     async with aiofiles.open(f"{filename}", "w") as file:
         await file.write(json.dumps(data, indent=4))
 
@@ -729,7 +1284,8 @@ async def write_json(data: dict):
 async def load_configuration(file_path: str) -> dict:
     """Load device configuration from a YAML file."""
 
-    nxos_cmds_default = ["show version",
+    nxos_cmds_default = [
+            "show version",
             "show interface",
             "show interface trunk",
             "show vlan",
@@ -749,8 +1305,19 @@ async def load_configuration(file_path: str) -> dict:
             "show ip ospf neighbor",
             "show ip pim neighbor",
             "show hsrp",
-            "show policy-map interface control-plane"]
-    ios_cmds_default = []
+            "show policy-map interface control-plane"
+        ]
+    ios_cmds_default = [
+            "show version",
+            "show interface",
+            "show interface trunk",
+            "show vlan",
+            "show interface status",
+            "show cdp neighbors",
+            "show ip arp",
+            "show mac address-table"
+            "show ip route"
+        ]
     
     async with aiofiles.open(file_path, "r") as file:
         content = await file.read()
@@ -758,6 +1325,8 @@ async def load_configuration(file_path: str) -> dict:
     if "devices" not in content_dict:
         raise ValueError(f"No 'devices' key is found in {file_path}")
     for device in content_dict["devices"]:
+        if "address" not in device and "file" not in device:
+            raise ValueError(f"No 'address' or 'file' key is found in {device}")
         if "username" not in device and "username" not in content_dict:
             raise ValueError(f"No 'username' key is found in {device}")
         if "username" not in device:
@@ -766,6 +1335,8 @@ async def load_configuration(file_path: str) -> dict:
             device["os_type"] = content_dict.get("os_type", "nxos")
         if "cli_output_format" not in device:
             device["cli_output_format"] = content_dict.get("cli_output_format", "json")
+            if device['os_type'] == 'ios' and device["cli_output_format"] == 'json':
+                raise ValueError(f"Cisco IOS does not support JSON output format")
         if "commands" not in device:
             if "commands" not in content_dict:
                 if device["os_type"] == "nxos":
@@ -789,14 +1360,20 @@ async def process_device(device: dict, command_parsers: dict) -> Any:
     if "address" in device:
         return await parse_device(device, supported_commands)
     elif "file" in device:
-        return await parse_text_file(device["file"], supported_commands)
+        return await parse_text_file(device, supported_commands)
 
 async def process_and_write(device: dict, command_parsers: dict):
     try:
         output = await process_device(device, command_parsers)
     except Exception as e:
-        output = {"msg": e}
-    await write_json(output)
+        name = device["address"] if "address" in device else device["file"]
+        output = {{name}:{"msg": f"Failed to process device {name}", "error": f"{e}"}}
+
+    if not output.keys():
+        logging.error(f'Found no key from parsing result of {device["host"] if "host" in device else device["file"]} ...')
+    elif list(output.keys())[0]:
+        logging.info(f'Writing {list(output.keys())[0]} to JSON file...')
+        await write_json(output)
     return output
 
 async def main():
@@ -832,7 +1409,10 @@ async def main():
             "show interface trunk": parse_ios_show_interface_trunk,
             "show vlan": parse_ios_show_vlan,
             "show interface status": parse_ios_show_interface_status,
-            "show run interface": parse_ios_show_run_interface,
+            "show cdp neighbors": parse_ios_show_cdp_neighbors,
+            "show ip arp": parse_ios_show_ip_arp,
+            "show mac address-table": parse_ios_show_mac_address_table,
+            "show ip route": parse_ios_show_ip_route
         },
     }
 
@@ -850,13 +1430,6 @@ async def main():
             outputs.append(result)
     # await write_list_json(outputs)
     return outputs
-    
-
-async def write_list_json(list_json):
-    write_json_tasks = []
-    for data in list_json:
-        write_json_tasks.append(write_json(data))
-        await asyncio.gather(*write_json_tasks)
 
 
 # Call the async main function
