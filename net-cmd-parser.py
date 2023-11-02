@@ -18,6 +18,31 @@ logging.basicConfig(
 )
 
 
+async def finalize_device_output(device: dict, device_output: dict) -> dict:
+    if device["cli_output_format"] == "json" and device["os_type"] == "nxos":
+        if "show interface trunk" in device_output and "error" not in device_output["show interface trunk"]:
+            device_output["show interface trunk"] = await zip_tables(device_output["show interface trunk"])
+        if "show vlan" in device_output and "error" not in device_output["show vlan"]:
+            device_output["show vlan"] = await zip_tables(device_output["show vlan"])
+
+    return device_output
+
+
+async def parse_cmd_output(cmd: str, output: str or dict, format: str, parser: Callable[[dict], dict]) -> (str, dict):
+    """Parses the output of specifc show command."""
+
+    logging.info(f'Parsing the output of {cmd}...')
+
+    try:
+        if format == "json":
+                return cmd, await parse_table(output)
+        elif format == "cli-text":
+            return cmd, parser(output)
+        
+    except Exception as e:
+        return cmd, {"msg": f"Failed to parse the output from {cmd}","error": f"{e}"}
+    
+
 def extract_txt_cmd_output(text: str, commands: list) -> dict:
     """Extract the output of each show commands from the text file."""
 
@@ -58,8 +83,8 @@ async def parse_text_file(device: dict, command_parsers: dict) -> dict:
     outputs = {}
     parse_output_tasks = []
     for cmd, output in cmd_output.items():
-        if cmd in device["commands"]: 
-            parse_output_tasks.append(parse_output(cmd, output, device["cli_output_format"], command_parsers.get(cmd)))
+        if cmd in device["commands"]:
+            parse_output_tasks.append(parse_cmd_output(cmd, output, device["cli_output_format"], command_parsers.get(cmd)))
 
     parsed_outputs = await asyncio.gather(*parse_output_tasks)
     for cmd, parsed_output in parsed_outputs:
@@ -67,25 +92,6 @@ async def parse_text_file(device: dict, command_parsers: dict) -> dict:
 
     return {filename: outputs}
 
-
-async def parse_output(cmd: str, output: str or dict, format: str, parser: Callable[[dict], dict]) -> (str, dict):
-    """Parses the output of specifc show command."""
-
-    logging.info(f'Parsing the output of {cmd}...')
-
-    try:
-
-        if format == "json":
-            if cmd in ["show interface trunk", "show vlan"]:
-                return cmd, await zip_tables(await parse_table(output))
-            else:
-                return cmd, await parse_table(output)
-        elif format == "cli-text":
-            return cmd, parser(output)
-        
-    except Exception as e:
-        return cmd, {"msg": f"Failed to parse the output from {cmd}","error": f"{e}"}
-    
 
 async def parse_device(device: dict, command_parsers: dict) -> dict:
     """Establish SSH connection to device, send commands, and parse their output."""
@@ -129,14 +135,16 @@ async def parse_device(device: dict, command_parsers: dict) -> dict:
             response = await conn.send_command(cmd if format == "cli-text" else f"{cmd} | json")
             try:
                 json_resp = json.loads(response.result)
-                parse_output_tasks.append(parse_output(cmd, json_resp, cli_output_format, command_parsers.get(cmd)))
+                parse_output_tasks.append(parse_cmd_output(cmd, json_resp, cli_output_format, command_parsers.get(cmd)))
             except json.JSONDecodeError:
                 logging.error(f'Command {cmd} CLI output is not in JSON format.')
-                result[host].update({cmd: {"output": response.result, "msg": "The CLI output is not in JSON format."}})
+                result[host].update({cmd: {"output": response.result, "error": "The CLI output is not in JSON format."}})
             
         parsed_outputs = await asyncio.gather(*parse_output_tasks)
         for cmd, parsed_output in parsed_outputs:
             cmd_out[cmd] = parsed_output
+        
+        cmd_out = finalize_device_output(device, cmd_out)
 
         # Save outputs to a file
         for cmd in device["commands"]:
@@ -156,6 +164,22 @@ async def parse_device(device: dict, command_parsers: dict) -> dict:
     logging.info(f'Finish parsing {host}...')
     return result
 
+
+async def process_device(device: dict, command_parsers: dict) -> Any:
+    """Process a single device based on the provided configuration."""
+
+    os_type = device["os_type"]
+
+    supported_commands = command_parsers.get(os_type, {})
+    for cmd in device["commands"]:
+        if cmd not in supported_commands:
+            raise ValueError(f"Command {cmd} is not supported in {os_type}")
+    if "address" in device:
+        return await parse_device(device, supported_commands)
+    elif "file" in device:
+        return await parse_text_file(device, supported_commands)
+
+
 async def write_json(data: dict):
     """Asynchronously write data to a JSON file."""
 
@@ -164,6 +188,21 @@ async def write_json(data: dict):
 
     async with aiofiles.open(f"{filename}", "w") as file:
         await file.write(json.dumps(data, indent=4))
+
+
+async def process_and_write(device: dict, command_parsers: dict):
+    try:
+        output = await process_device(device, command_parsers)
+    except Exception as e:
+        name = device["address"] if "address" in device else device["file"]
+        output = {name:{"msg": f"Failed to process device {name}", "error": f"{e}"}}
+
+    if not output.keys():
+        logging.error(f'Found no key from parsing result of {device["host"] if "host" in device else device["file"]} ...')
+    elif list(output.keys())[0]:
+        logging.info(f'Writing {list(output.keys())[0]} to JSON file...')
+        await write_json(output)
+    return output
 
 
 async def load_configuration(file_path: str) -> dict:
@@ -232,34 +271,6 @@ async def load_configuration(file_path: str) -> dict:
                 device["commands"] = content_dict["commands"]
     return content_dict
 
-
-async def process_device(device: dict, command_parsers: dict) -> Any:
-    """Process a single device based on the provided configuration."""
-
-    os_type = device["os_type"]
-
-    supported_commands = command_parsers.get(os_type, {})
-    for cmd in device["commands"]:
-        if cmd not in supported_commands:
-            raise ValueError(f"Command {cmd} is not supported in {os_type}")
-    if "address" in device:
-        return await parse_device(device, supported_commands)
-    elif "file" in device:
-        return await parse_text_file(device, supported_commands)
-
-async def process_and_write(device: dict, command_parsers: dict):
-    try:
-        output = await process_device(device, command_parsers)
-    except Exception as e:
-        name = device["address"] if "address" in device else device["file"]
-        output = {name:{"msg": f"Failed to process device {name}", "error": f"{e}"}}
-
-    if not output.keys():
-        logging.error(f'Found no key from parsing result of {device["host"] if "host" in device else device["file"]} ...')
-    elif list(output.keys())[0]:
-        logging.info(f'Writing {list(output.keys())[0]} to JSON file...')
-        await write_json(output)
-    return output
 
 async def main():
 
