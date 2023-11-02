@@ -229,7 +229,7 @@ async def load_configuration(file_path: str) -> dict:
             "show ip ospf neighbor",
             "show ip pim neighbor",
             "show hsrp",
-            "show policy-map interface control-plane"
+            "show policy-map interface control-plane",
         ]
     ios_cmds_default = [
             "show version",
@@ -240,7 +240,8 @@ async def load_configuration(file_path: str) -> dict:
             "show cdp neighbor",
             "show ip arp",
             "show mac address-table",
-            "show ip route"
+            "show ip route",
+            "show run interface",
         ]
     
     async with aiofiles.open(file_path, "r") as file:
@@ -251,9 +252,9 @@ async def load_configuration(file_path: str) -> dict:
     for device in content_dict["devices"]:
         if "address" not in device and "file" not in device:
             raise ValueError(f"No 'address' or 'file' key is found in {device}")
-        if "username" not in device and "username" not in content_dict:
+        if "username" not in device and "username" not in content_dict and "address" in device:
             raise ValueError(f"No 'username' key is found in {device}")
-        if "username" not in device:
+        if "username" not in device and "address" in device:
             device["username"] = content_dict["username"]
         if "os_type" not in device:
             device["os_type"] = content_dict.get("os_type", "nxos")
