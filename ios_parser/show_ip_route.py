@@ -16,10 +16,10 @@ def parse_ios_show_ip_route(cli_output: str) -> dict:
             codes_mapping[code] = name.strip()
 
         route_pattern = re.compile(
-                r"^(?P<codes>[\S\s]+?)\s+(?P<prefix>\d+\.\d+\.\d+\.\d+/\d+)"
-                r"(?:\s+\[(?P<preference>\d+)/(?P<metric>\d+)\])?"
-                r"\s+(?:via\s+(?P<next_hop>[\d\.]+)|(?P<directly_connected>is directly connected)),?"
-                r"(?:\s+.*,)?\s+(?P<interface>\S+)"
+                r"^(?P<codes>.+?)\s+(?P<prefix>\d+\.\d+\.\d+\.\d+/\d+)"
+                r"(?:\s+\[(?P<preference>\d+)/(?P<metric>\d+)\])?\s+"
+                r"(via\s+(?P<next_hop>\d+\.\d+\.\d+\.\d+)?|(?P<directly_connected>is directly connected)?,)"
+                r"(\s+)?(?P<interface>\S+)?"
             )
 
         routes = {}
