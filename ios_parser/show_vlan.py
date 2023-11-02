@@ -45,7 +45,7 @@ def parse_ios_show_vlan(cli_output: str) -> dict:
                 # Continuation lines for the ports of a VLAN
                 ports = line.strip().split(", ")
                 ports = [port for port in ports if port]
-                vlan_data[current_vlan]["Ports"].extend(ports)
+                vlan_data[current_vlan]["ports"].extend(ports)
 
         # Parse more info of VLAN
         for line in vlan_more_string.splitlines():
