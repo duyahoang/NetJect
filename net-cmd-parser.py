@@ -200,7 +200,7 @@ async def load_configuration(file_path: str) -> dict:
             "show interface status",
             "show cdp neighbor",
             "show ip arp",
-            "show mac address-table"
+            "show mac address-table",
             "show ip route"
         ]
     
@@ -252,7 +252,7 @@ async def process_and_write(device: dict, command_parsers: dict):
         output = await process_device(device, command_parsers)
     except Exception as e:
         name = device["address"] if "address" in device else device["file"]
-        output = {{name}:{"msg": f"Failed to process device {name}", "error": f"{e}"}}
+        output = {name:{"msg": f"Failed to process device {name}", "error": f"{e}"}}
 
     if not output.keys():
         logging.error(f'Found no key from parsing result of {device["host"] if "host" in device else device["file"]} ...')
@@ -294,14 +294,14 @@ async def main():
             "show interface trunk": parse_ios_show_interface_trunk,
             "show vlan": parse_ios_show_vlan,
             "show interface status": parse_ios_show_interface_status,
-            "show cdp neighbors": parse_ios_show_cdp_neighbor,
+            "show cdp neighbor": parse_ios_show_cdp_neighbor,
             "show ip arp": parse_ios_show_ip_arp,
             "show mac address-table": parse_ios_show_mac_address_table,
             "show ip route": parse_ios_show_ip_route
         },
     }
 
-    config = await load_configuration("/Users/duyhoan/Documents/GitHub-Cisco/Small Scripts/net-cmd-parser/devices-config.yaml")
+    config = await load_configuration("devices-config.yaml")
     tasks = []
     if "devices" in config:
         for device in config["devices"]:
