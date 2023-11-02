@@ -12,7 +12,7 @@ def parse_ios_show_interface_trunk(cli_output: str) -> dict:
         # Regex patterns map
         regex_map = {
             "port_details_header": r"Port\s+Mode\s+Encapsulation\s+Status\s+Native vlan",
-            "port_details": r"(?P<port>\S+)\s+(?P<mode>\S)\s+(?P<encapsulation>\S)\s+(?P<status>\S+)\s+(?P<native_vlan>\d+)",
+            "port_details": r"(?P<port>\S+)\s+(?P<mode>\S+)\s+(?P<encapsulation>\S+)\s+(?P<status>\S+)\s+(?P<native_vlan>\d+)",
             "vlans_allowed_header": r"Port\s+Vlans allowed on trunk",
             "vlans_allowed": r"(?P<port>\S+)\s+(?P<vlans_allowed>[\d,-]+)",
             "vlans_allowed_mgmt_header": r"Port\s+Vlans allowed and active in management domain",
