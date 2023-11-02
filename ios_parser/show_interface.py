@@ -15,7 +15,7 @@ def parse_ios_show_interface(cli_output: str) -> dict:
             "internet_address": r"Internet address is (.+)",
             "description": r"Description: (.+)",
             "mtu": r"MTU (.+?) bytes",
-            "encapsulation": r"Encapsulation (.+)",
+            "encapsulation": r"Encapsulation (.+?),",
             "duplex": r"(\w+-duplex)",
             "speed": r", (\d+[GM]b/s),",
             "media": r"media type is (.+)",
@@ -40,21 +40,25 @@ def parse_ios_show_interface(cli_output: str) -> dict:
                 match = re.search(regex, line)
                 if match and current_interface:
                     if key == "members":
-                        result["interfaces"][current_interface][key] = match.group(1).split()
+                        result[current_interface][key] = match.group(1).split()
                     else:
-                        result["interfaces"][current_interface][key] = match.group(1)
+                        result[current_interface][key] = match.group(1)
 
         for key in regex_map.keys():
+            if key == "interface":
+                continue
             for interface, values in result.items():
                 if key not in values:
                     result[interface][key] = ""
         
         for interface, attribute in result.items():
-            result[mem]["port_channel"] = ""
+            result[interface]["port_channel"] = ""
             if attribute["members"]:
                 for mem in attribute["members"]:
-                    if mem in result:
-                        result[mem]["port_channel"] = interface
+                    mem_match = re.search(r"[\d/]+", mem).group(0)
+                    for inter in result:
+                        if mem_match in inter:
+                            result[inter]["port_channel"] = interface
 
     except Exception as e:
         result = {"error": f"{e}"}
