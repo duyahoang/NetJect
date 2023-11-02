@@ -40,6 +40,8 @@ def parse_ios_show_interface_status(cli_output: str) -> dict:
         }
 
         for line in lines:
+            if re.search(regex_map["interface_status_header"], line):
+                continue
             if re.search(regex_map["separator_line"], line):
                 continue
             port = line[col_starts["Port"]:col_starts["Name"]].strip()
