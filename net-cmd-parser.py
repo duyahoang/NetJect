@@ -144,7 +144,7 @@ async def parse_device(device: dict, command_parsers: dict) -> dict:
         for cmd, parsed_output in parsed_outputs:
             cmd_out[cmd] = parsed_output
         
-        cmd_out = finalize_device_output(device, cmd_out)
+        cmd_out = await finalize_device_output(device, cmd_out)
 
         # Save outputs to a file
         for cmd in device["commands"]:

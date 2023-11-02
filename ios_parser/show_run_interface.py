@@ -12,18 +12,11 @@ def parse_ios_show_run_interface(cli_output: str) -> dict:
     # Regular expressions for each attribute
         regex_map = {
             "interface": re.compile(r"^interface (\S+)"),
-            "description": re.compile(r"^ description (.+)"),
-            "switchport_mode": re.compile(r"^ switchport mode (\S+)"),
-            "switchport_trunk_allowed_vlan": re.compile(
-                r"^ switch port trunk allowed vlan (.+)"
-            ),
-            "switchport_trunk_allowed_vlan_add": re.compile(
-                r"^ switchport trunk allowed vlan add (.+)"
-            ),
-            "no_switchport": re.compile(r"^ no switchport"),
-            "no_ip_address": re.compile(r"^ no IP address"),
-            "switch_virtual_link": re.compile(r"^ switch virtual link (\d+)"),
-            "login_event_link_status": re.compile(r"^ login event link-status"),
+            "description": re.compile(r"\s+description (.+)"),
+            "switchport_mode": re.compile(r"\s+switchport mode (\S+)"),
+            "native_vlan": re.compile(r"native vlan (.+)"),
+            "access_vlan": re.compile(r"\s+switchport access vlan (\d+)"),
+            "ip_address": re.compile(r"^ ip address (.+)"),
             "channel_group": re.compile(r"^ channel-group (\d+) mode (\S+)"),
         }
 
@@ -44,21 +37,18 @@ def parse_ios_show_run_interface(cli_output: str) -> dict:
                         continue
                     match = regex.match(line)
                     if match:
-                        if attr in [
-                            "switchport_trunk_allowed_vlan",
-                            "switchport_trunk_allowed_vlan_add",
-                        ]:
-                            # Add the allowed vlans to the list
-                            vlans = match.group(1)
-                            if "allowed_vlans" in interfaces[current_interface]:
-                                interfaces[current_interface]["allowed_vlans"] += (
-                                    "," + vlans
-                                )
-                            else:
-                                interfaces[current_interface]["allowed_vlans"] = vlans
+                        if attr == "channel_group":
+                            interfaces[current_interface][attr] = match.group(1)
+                            interfaces[current_interface]["channel_group_mode"] = match.group(2)
                         else:
                             interfaces[current_interface][attr] = match.group(1)
-    
+
+        attributes = ["description","switchport_mode","native_vlan","access_vlan","ip_address","channel_group","channel_group_mode"]
+        for attr in attributes:
+            for inter, values in interfaces.items():
+                if attr not in values:
+                    interfaces[inter][attr] = ""
+
     except Exception as e:
         interfaces["msg"] = e
     return interfaces
