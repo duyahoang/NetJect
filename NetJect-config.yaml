@@ -1,0 +1,8 @@
+username: admin
+password: C!sc0123
+os_type: nxos
+cmd_output_format: json
+output_path: /path/to/output
+devices:
+  - address: <<ip_address>>
+  - file: /path/to/file.txt

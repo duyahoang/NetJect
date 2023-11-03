@@ -1,3 +1,4 @@
+# flake8: noqa E501
 import pandas as pd
 import json
 import argparse

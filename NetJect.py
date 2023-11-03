@@ -5,6 +5,8 @@ import getpass
 import logging
 import yaml
 import aiofiles
+import argparse
+from pathlib import Path
 from scrapli.driver.core import AsyncIOSXEDriver
 from scrapli.driver.core import AsyncNXOSDriver
 from typing import Any, Callable
@@ -36,7 +38,7 @@ async def parse_cmd_output(cmd: str, output: str or dict, format: str, parser: C
     try:
         if format == "json":
                 return cmd, await parse_table(output)
-        elif format == "cli-text":
+        elif format == "text":
             return cmd, parser(output)
         
     except Exception as e:
@@ -73,7 +75,8 @@ def extract_txt_cmd_output(text: str, commands: list) -> dict:
 async def parse_text_file(device: dict, command_parsers: dict) -> dict:
     """Parses the text file that contain show commands and their output."""
 
-    filename = device["file"]
+    path = Path(device["file"])
+    filename = path.stem
     logging.info(f'Extracting show commands from {filename} txt file...')
     async with aiofiles.open(filename, "r") as file:
         content = await file.read()
@@ -132,7 +135,7 @@ async def parse_device(device: dict, command_parsers: dict) -> dict:
         
         parse_output_tasks = []
         for cmd in device["commands"]:
-            response = await conn.send_command(cmd if format == "cli-text" else f"{cmd} | json")
+            response = await conn.send_command(cmd if format == "text" else f"{cmd} | json")
             try:
                 json_resp = json.loads(response.result)
                 parse_output_tasks.append(parse_cmd_output(cmd, json_resp, cli_output_format, command_parsers.get(cmd)))
@@ -180,13 +183,14 @@ async def process_device(device: dict, command_parsers: dict) -> Any:
         return await parse_text_file(device, supported_commands)
 
 
-async def write_json(data: dict):
+async def write_json(output_path: Path, data: dict):
     """Asynchronously write data to a JSON file."""
 
     for host, _ in data.items():
         filename = f"{host}.json"
+    full_filename = output_path / filename
 
-    async with aiofiles.open(f"{filename}", "w") as file:
+    async with aiofiles.open(str(full_filename), "w") as file:
         await file.write(json.dumps(data, indent=4))
 
 
@@ -198,14 +202,14 @@ async def process_and_write(device: dict, command_parsers: dict):
         output = {name:{"msg": f"Failed to process device {name}", "error": f"{e}"}}
 
     if not output.keys():
-        logging.error(f'Found no key from parsing result of {device["host"] if "host" in device else device["file"]} ...')
+        logging.error(f'Found no key from parsing result of {device["host"] if "host" in device else device["file"]}')
     elif list(output.keys())[0]:
         logging.info(f'Writing {list(output.keys())[0]} to JSON file...')
-        await write_json(output)
+        await write_json(device["output_path"], output)
     return output
 
 
-async def load_configuration(file_path: str) -> dict:
+async def load_configuration(args_dict: dict) -> dict:
     """Load device configuration from a YAML file."""
 
     nxos_cmds_default = [
@@ -243,34 +247,33 @@ async def load_configuration(file_path: str) -> dict:
             "show ip route",
             "show run interface",
         ]
-    
-    async with aiofiles.open(file_path, "r") as file:
-        content = await file.read()
-    content_dict = yaml.safe_load(content)
-    if "devices" not in content_dict:
-        raise ValueError(f"No 'devices' key is found in {file_path}")
-    for device in content_dict["devices"]:
+
+    for device in args_dict["devices"]:
         if "address" not in device and "file" not in device:
             raise ValueError(f"No 'address' or 'file' key is found in {device}")
-        if "username" not in device and "username" not in content_dict and "address" in device:
+        if "username" not in device and "username" not in args_dict and "address" in device:
             raise ValueError(f"No 'username' key is found in {device}")
         if "username" not in device and "address" in device:
-            device["username"] = content_dict["username"]
+            device["username"] = args_dict["username"]
+        if "password" not in device and "password" in args_dict:
+            device["password"] = args_dict["password"]
         if "os_type" not in device:
-            device["os_type"] = content_dict.get("os_type", "nxos")
+            device["os_type"] = args_dict.get("os_type", "nxos")
         if "cli_output_format" not in device:
-            device["cli_output_format"] = content_dict.get("cli_output_format", "json")
+            device["cli_output_format"] = args_dict.get("cli_output_format", "json")
             if device['os_type'] == 'ios' and device["cli_output_format"] == 'json':
                 raise ValueError(f"Cisco IOS does not support JSON output format")
+        if "output_path" not in device:
+            device["output_path"] = Path(args_dict.get("output_path", Path.cwd()))
         if "commands" not in device:
-            if "commands" not in content_dict:
+            if "commands" not in args_dict:
                 if device["os_type"] == "nxos":
                     device["commands"] = nxos_cmds_default
                 elif device["os_type"] == "ios":
                     device["commands"] = ios_cmds_default
             else:
-                device["commands"] = content_dict["commands"]
-    return content_dict
+                device["commands"] = args_dict["commands"]
+    return args_dict
 
 
 async def main():
@@ -314,7 +317,50 @@ async def main():
         },
     }
 
-    config = await load_configuration("devices-config.yaml")
+
+    # Create the argument parser
+    parser = argparse.ArgumentParser(description='NetJect - Network JSON Object')
+
+    # Define arguments that correspond to the YAML configuration
+    parser.add_argument('--config', type=str, help='Path to the NetJect-config.yaml configuration file.')
+    parser.add_argument('--username', type=str, help='Username for device login.')
+    parser.add_argument('--password', type=str, help='Password for device login. If not provide, NetJect will ask later.')
+    parser.add_argument('--os_type', type=str, choices=['nxos', 'ios'], help='OS type of the device. (nxos | ios)')
+    parser.add_argument('--cmd_output_format', type=str, choices=['json', 'text'], help='Command output format. (json | text).')
+    parser.add_argument('--output_path', type=str, help='Path to save the output.')
+    parser.add_argument('--commands', nargs='*', help='List of commands to execute.')
+    parser.add_argument('--addresses', nargs='*', help='List of device addresses.')
+    parser.add_argument('--files', nargs='*', help='List of files with device information.')
+
+    args = parser.parse_args()
+    
+    if args.config:
+        config_path = Path(args.config)
+        if config_path.is_dir():
+            config_file = config_path / "NetJect-config.yaml"
+            if config_file.is_file():
+                with open(config_file, 'r') as stream:
+                    args_dict = yaml.safe_load(stream)
+            else:
+                logging.error(f"NetJect-config.yaml file is not found in {config_path}.")
+                raise ValueError(f"NetJect-config.yaml file is not found in {config_path}.")
+        else:
+            logging.error(f"Path {args.config} not found.")
+            raise ValueError(f"NetJect-config.yaml file is not found in {config_path}.")
+    else:
+        # Convert arguments to a dictionary, removing any None values
+        args_dict = {k: v for k, v in vars(args).items() if v is not None}
+        args_dict["devices"] = []
+        for addr in args_dict.get("addresses", []):
+            args_dict["devices"].append({"address": addr})
+        for file in args_dict.get("files", []):
+            args_dict["devices"].append({"file": file})
+
+    if "devices" not in args_dict or len(args_dict["devices"]) == 0:
+        raise ValueError(f"No devices are provided.")
+
+    config = await load_configuration(args_dict)
+
     tasks = []
     if "devices" in config:
         for device in config["devices"]:
