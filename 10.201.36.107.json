@@ -1,6 +1,0 @@
-{
-    "10.201.36.107": {
-        "msg": "Failed to process device 10.201.36.107",
-        "error": "'coroutine' object is not iterable"
-    }
-}
