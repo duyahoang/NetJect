@@ -298,7 +298,7 @@ async def main():
             "show ip ospf neighbor": parse_nxos_show_ip_ospf_neighbor,
             "show ip pim neighbor": parse_nxos_show_ip_pim_neighbor,
             "show hsrp": parse_nxos_show_hsrp,
-            "show policy-map interface control-plane": parse_nxos_show_policy_map_int_ctrl_plane
+            "show policy-map interface control-plane": parse_nxos_show_policy_map_int_ctrl_plane,
         },
         "ios": {
             "show version": parse_ios_show_version,
@@ -309,7 +309,8 @@ async def main():
             "show cdp neighbor": parse_ios_show_cdp_neighbor,
             "show ip arp": parse_ios_show_ip_arp,
             "show mac address-table": parse_ios_show_mac_address_table,
-            "show ip route": parse_ios_show_ip_route
+            "show ip route": parse_ios_show_ip_route,
+            "show run interface": parse_ios_show_run_interface,
         },
     }
 
