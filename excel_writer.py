@@ -2,6 +2,13 @@
 import pandas as pd
 import json
 import argparse
+from pathlib import Path
+
+
+# Function to find all json file in the directory and its subdirectory
+def find_json_files(directory):
+    path = Path(directory)
+    return list(path.rglob('*.json'))
 
 
 # Function to handle the conversion of lists to strings
@@ -41,18 +48,7 @@ def json_to_dataframe(data):
         raise ValueError("Data is neither a dictionary nor a list")
 
 
-def main():
-
-    # Set up the argument parser
-    parser = argparse.ArgumentParser(description='Convert JSON data to Excel')
-    parser.add_argument('json_file', help='The path to the JSON data file')
-
-    # Parse arguments
-    args = parser.parse_args()
-
-    # Read the JSON file
-    with open(args.json_file, 'r') as file:
-        data = json.load(file)
+def write_to_excel(data):
 
     device_name = list(data.keys())[0]
 
@@ -66,5 +62,34 @@ def main():
                 # Write the DataFrame to a new sheet in the Excel file
                 df.to_excel(writer, sheet_name=command_name, index=False)
 
+def main():
 
-main()
+    # Set up the argument parser
+    parser = argparse.ArgumentParser(description='Write JSON data to Excel')
+    parser.add_argument('--json_file', type=str, help='The JSON data file')
+    parser.add_argument('--directory', type=str, help='The directory that has one or multiple JSON files.')
+
+    # Parse arguments
+    args = parser.parse_args()
+
+    data_list = []
+
+    # Read the JSON file
+    if args.json_file:
+        with open(args.json_file, 'r') as content:
+            data = json.load(content)
+            data_list.append(data)
+    
+    if args.directory:
+        json_files = find_json_files(args.directory)
+        for file in json_files:
+            with open(f'{file}', 'r') as content:
+                data = json.load(content)
+                data_list.append(data)
+    
+    for data in data_list:
+        write_to_excel(data)
+
+
+if __name__ == "__main__":
+    main()

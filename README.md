@@ -80,7 +80,7 @@ For now, the output result is the device name with each show command as the key 
 
 1. **Clone the Repository**:
    ```
-   git clone https://github.com/duyahoang/net-cmd-parser
+   git clone https://github.com/duyahoang/NetJect
    ```
 2. Install Required Libraries:
    Make sure you have Python and pip installed. Then run:
@@ -96,7 +96,7 @@ For now, the output result is the device name with each show command as the key 
 2. Execute the script:
    
    ```
-   python netject.py
+   python NetJect.py
    ```
 
 3. Check the generated JSON files for the parsed output.

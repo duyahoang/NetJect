@@ -14,12 +14,6 @@ from ios_parser import *
 from nxos_parser import *
 
 
-# Setting up logging
-logging.basicConfig(
-    level=logging.INFO, format="[%(asctime)s] [%(levelname)s]: %(message)s"
-)
-
-
 async def finalize_device_output(device: dict, device_output: dict) -> dict:
     if device["cli_output_format"] == "json" and device["os_type"] == "nxos":
         if "show interface trunk" in device_output and "error" not in device_output["show interface trunk"]:
@@ -276,7 +270,63 @@ async def load_configuration(args_dict: dict) -> dict:
     return args_dict
 
 
-async def main():
+def parse_NetJect_args():
+
+    # Create the argument parser
+    parser = argparse.ArgumentParser(description='NetJect - Network JSON Object')
+
+    # Define arguments that correspond to the YAML configuration
+    parser.add_argument('--config', type=str, help='Path to the NetJect-config.yaml configuration file.')
+    parser.add_argument('--username', type=str, help='Username for device login.')
+    parser.add_argument('--password', type=str, help='Password for device login. If not provide, NetJect will ask later.')
+    parser.add_argument('--os_type', type=str, choices=['nxos', 'ios'], help='OS type of the device. (nxos | ios)')
+    parser.add_argument('--cmd_output_format', type=str, choices=['json', 'text'], help='Command output format. (json | text).')
+    parser.add_argument('--output_path', type=str, help='Path to save the output.')
+    parser.add_argument('--commands', nargs='*', help='List of commands to execute.')
+    parser.add_argument('--addresses', nargs='*', help='List of device addresses.')
+    parser.add_argument('--files', nargs='*', help='List of files with device information.')
+
+    args = parser.parse_args()
+
+    args_dict = {}
+    
+    if args.config:
+        config_path = Path(args.config)
+        if config_path.is_dir():
+            config_file = config_path / "NetJect-config.yaml"
+            if config_file.is_file():
+                with open(config_file, 'r') as stream:
+                    args_dict = yaml.safe_load(stream)
+            else:
+                logging.error(f"NetJect-config.yaml file is not found in {config_path}.")
+                raise ValueError(f"NetJect-config.yaml file is not found in {config_path}.")
+        else:
+            logging.error(f"Path {args.config} not found.")
+            raise ValueError(f"NetJect-config.yaml file is not found in {config_path}.")
+    elif args.addresses or args.files:
+        # Convert arguments to a dictionary, removing any None values
+        args_dict = {k: v for k, v in vars(args).items() if v is not None}
+        args_dict["devices"] = []
+        for addr in args_dict.get("addresses", []):
+            args_dict["devices"].append({"address": addr})
+        for file in args_dict.get("files", []):
+            args_dict["devices"].append({"file": file})
+    else:
+        config_file = Path.cwd() / "NetJect-config.yaml"
+        if config_file.is_file():
+            with open(config_file, 'r') as stream:
+                args_dict = yaml.safe_load(stream)
+        else:
+            logging.error(f"Path to the NetJect-config.yaml configuration file is not provided and NetJect-config.yaml file is not found in current working directory.")
+            raise ValueError(f"Path to the NetJect-config.yaml configuration file is not provided and NetJect-config.yaml file is not found in current working directory.")
+
+    if "devices" not in args_dict or len(args_dict["devices"]) == 0:
+        raise ValueError(f"No devices are provided.")
+    
+    return args_dict
+
+
+async def NetJect(args_dict) -> dict:
 
     # command_parsers based on the OS type
     command_parsers = {
@@ -317,48 +367,6 @@ async def main():
         },
     }
 
-
-    # Create the argument parser
-    parser = argparse.ArgumentParser(description='NetJect - Network JSON Object')
-
-    # Define arguments that correspond to the YAML configuration
-    parser.add_argument('--config', type=str, help='Path to the NetJect-config.yaml configuration file.')
-    parser.add_argument('--username', type=str, help='Username for device login.')
-    parser.add_argument('--password', type=str, help='Password for device login. If not provide, NetJect will ask later.')
-    parser.add_argument('--os_type', type=str, choices=['nxos', 'ios'], help='OS type of the device. (nxos | ios)')
-    parser.add_argument('--cmd_output_format', type=str, choices=['json', 'text'], help='Command output format. (json | text).')
-    parser.add_argument('--output_path', type=str, help='Path to save the output.')
-    parser.add_argument('--commands', nargs='*', help='List of commands to execute.')
-    parser.add_argument('--addresses', nargs='*', help='List of device addresses.')
-    parser.add_argument('--files', nargs='*', help='List of files with device information.')
-
-    args = parser.parse_args()
-    
-    if args.config:
-        config_path = Path(args.config)
-        if config_path.is_dir():
-            config_file = config_path / "NetJect-config.yaml"
-            if config_file.is_file():
-                with open(config_file, 'r') as stream:
-                    args_dict = yaml.safe_load(stream)
-            else:
-                logging.error(f"NetJect-config.yaml file is not found in {config_path}.")
-                raise ValueError(f"NetJect-config.yaml file is not found in {config_path}.")
-        else:
-            logging.error(f"Path {args.config} not found.")
-            raise ValueError(f"NetJect-config.yaml file is not found in {config_path}.")
-    else:
-        # Convert arguments to a dictionary, removing any None values
-        args_dict = {k: v for k, v in vars(args).items() if v is not None}
-        args_dict["devices"] = []
-        for addr in args_dict.get("addresses", []):
-            args_dict["devices"].append({"address": addr})
-        for file in args_dict.get("files", []):
-            args_dict["devices"].append({"file": file})
-
-    if "devices" not in args_dict or len(args_dict["devices"]) == 0:
-        raise ValueError(f"No devices are provided.")
-
     config = await load_configuration(args_dict)
 
     tasks = []
@@ -375,7 +383,11 @@ async def main():
     return outputs
 
 
-# Call the async main function
+# Call the async NetJect function
 if __name__ == "__main__":
-    outputs = asyncio.run(main())
-    
+    # Setting up logging
+    logging.basicConfig(
+        level=logging.INFO, format="[%(asctime)s] [%(levelname)s]: %(message)s"
+    )
+    args_dict = parse_NetJect_args()
+    outputs = asyncio.run(NetJect(args_dict))
