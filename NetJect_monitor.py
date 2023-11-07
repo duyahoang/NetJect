@@ -55,28 +55,28 @@ def load_original_state(file_list):
 
 # Process each device
 async def process_device(device: dict):
-
-    try:
-        if await ping_device(device):
-            current_state = await NetJect({"devices": [device]})
-            current_state = current_state[0]
-            hostname = list(current_state.keys())[0]
-            diff = compare_json(device["original_state"], current_state)
-            if diff:
-                logger.info(f"{hostname} state has been changed:\n{diff}")
-            else:
-                logger.info(f"{hostname} state has no changed.")
-    except Exception as e:
-        logger.error(f"An error occurred during processing device {device['address']}: {str(e)}")
+    while True:
+        try:
+            if await ping_device(device):
+                current_state = await NetJect({"devices": [device]})
+                current_state = current_state[0]
+                hostname = list(current_state.keys())[0]
+                diff = compare_json(device["original_state"], current_state)
+                if diff:
+                    logger.info(f"{hostname} state has been changed:\n{diff}")
+                else:
+                    logger.info(f"{hostname} state has no changed.")
+        except Exception as e:
+            logger.error(f"An error occurred during processing device {device['address']}: {str(e)}")
+        finally:
+            await asyncio.sleep(3)  # Sleep before next round
 
 
 # Monitoring loop for all devices
 async def monitor_devices(devices):
     try:
-        while True:
-            tasks = [process_device(device) for device in devices]
-            await asyncio.gather(*tasks)
-            await asyncio.sleep(3)  # Sleep before next round
+        tasks = [process_device(device) for device in devices]
+        await asyncio.gather(*tasks)
     except Exception as e:
         logger.error(f"{e}")
 
@@ -135,7 +135,7 @@ if __name__ == "__main__":
     # logging.basicConfig(level=logging.INFO, format='[%(asctime)s] [%(levelname)s]: %(message)s')
     handler = logging.StreamHandler()
     handler.setLevel(logging.INFO)
-    formatter = logging.Formatter('[%(asctime)s] [%(levelname)s]: %(message)s')
+    formatter = logging.Formatter('[%(asctime)s] [%(levelname)s]: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
     handler.setFormatter(formatter)
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)  # Set logger to only pass INFO messages and above
