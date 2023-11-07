@@ -40,6 +40,8 @@ def parse_nxos_show_interface_status(cli_output: str) -> dict:
         }
 
         for line in lines:
+            if re.search(regex_map["interface_status_header"], line):
+                continue
             if re.search(regex_map["separator_line"], line):
                 continue
             port = line[col_starts["Port"]:col_starts["Name"]].strip()
@@ -59,8 +61,14 @@ def parse_nxos_show_interface_status(cli_output: str) -> dict:
                     "speed": speed,
                     "type": int_type,
                 }
+
+        attributes = ["name","status","vlan","duplex","speed","type"]
+        for attr in attributes:
+            for interface, values in interfaces.items():
+                if attr not in values:
+                    interfaces[interface][attr] = ""
                 
     except Exception as e:
-        interfaces["msg"] = f"{e}"
+        interfaces["error"] = f"{e}"
 
     return interfaces

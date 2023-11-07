@@ -6,12 +6,19 @@ import logging
 import yaml
 import aiofiles
 import argparse
+import pandas as pd
 from pathlib import Path
 from scrapli.driver.core import AsyncIOSXEDriver
 from scrapli.driver.core import AsyncNXOSDriver
 from typing import Any, Callable
 from ios_parser import *
 from nxos_parser import *
+
+
+# Disable propagation to prevent logs from being handled by ancestor loggers
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.ERROR)
+logger.propagate = False
 
 
 async def finalize_device_output(device: dict, device_output: dict) -> dict:
@@ -27,7 +34,7 @@ async def finalize_device_output(device: dict, device_output: dict) -> dict:
 async def parse_cmd_output(cmd: str, output: str or dict, format: str, parser: Callable[[dict], dict]) -> (str, dict):
     """Parses the output of specifc show command."""
 
-    logging.info(f'Parsing the output of {cmd}...')
+    logger.info(f'Parsing the output of {cmd}...')
 
     try:
         if format == "json":
@@ -71,7 +78,7 @@ async def parse_text_file(device: dict, command_parsers: dict) -> dict:
 
     path = Path(device["file"])
     filename = path.stem
-    logging.info(f'Extracting show commands from {filename} txt file...')
+    logger.info(f'Extracting show commands from {filename} txt file...')
     async with aiofiles.open(filename, "r") as file:
         content = await file.read()
 
@@ -86,6 +93,8 @@ async def parse_text_file(device: dict, command_parsers: dict) -> dict:
     parsed_outputs = await asyncio.gather(*parse_output_tasks)
     for cmd, parsed_output in parsed_outputs:
         outputs[cmd] = parsed_output
+
+    device["json_data"] = {filename: outputs}
 
     return {filename: outputs}
 
@@ -107,6 +116,7 @@ async def parse_device(device: dict, command_parsers: dict) -> dict:
                 auth_strict_key=False,
                 transport="asyncssh",
             )
+            logger.info(f"Connecting to {host} and retrieving show commands output...")
             await conn.open()
         elif device["os_type"] == "nxos":
             conn = AsyncNXOSDriver(
@@ -116,12 +126,14 @@ async def parse_device(device: dict, command_parsers: dict) -> dict:
                 auth_strict_key=False,
                 transport="asyncssh",
             )
+            logger.info(f"onnecting to {host} and retrieving show commands output...")
             await conn.open()
         else:
             raise ValueError(f"Unsupported OS type: {device['os_type']}")
 
         hostname_response = await conn.send_command("show hostname")
-        host = hostname_response.result
+        device["hostname"] = hostname_response.result
+        host = f"{hostname_response.result}_{host}"
         result = {host: {}}
         cli_output_format = device.get("cli_output_format", "json")
         if device['os_type'] == 'ios' and cli_output_format == 'json':
@@ -129,13 +141,20 @@ async def parse_device(device: dict, command_parsers: dict) -> dict:
         
         parse_output_tasks = []
         for cmd in device["commands"]:
-            response = await conn.send_command(cmd if format == "text" else f"{cmd} | json")
-            try:
-                json_resp = json.loads(response.result)
-                parse_output_tasks.append(parse_cmd_output(cmd, json_resp, cli_output_format, command_parsers.get(cmd)))
-            except json.JSONDecodeError:
-                logging.error(f'Command {cmd} CLI output is not in JSON format.')
-                result[host].update({cmd: {"output": response.result, "error": "The CLI output is not in JSON format."}})
+            if cli_output_format == "json":
+                response = await conn.send_command(f"{cmd} | json")
+                try:
+                    json_resp = json.loads(response.result)
+                    parse_output_tasks.append(parse_cmd_output(cmd, json_resp, cli_output_format, command_parsers.get(cmd)))
+                except json.JSONDecodeError:
+                    logger.error(f'Command {cmd} CLI output is not in JSON format.')
+                    result[host].update({cmd: {"output": response.result, "error": "The CLI output is not in JSON format."}})
+            elif cli_output_format == "text":
+                response = await conn.send_command(cmd)
+                parse_output_tasks.append(parse_cmd_output(cmd, response.result, cli_output_format, command_parsers.get(cmd)))
+            else:
+                logger.error(f'{host}: NetJect only support cli_output_format in json or text. Have {cli_output_format}.')
+                result[host].update({ "error": f'{host}: NetJect only support cli_output_format in json or text. Have {cli_output_format}.'})
             
         parsed_outputs = await asyncio.gather(*parse_output_tasks)
         for cmd, parsed_output in parsed_outputs:
@@ -146,7 +165,7 @@ async def parse_device(device: dict, command_parsers: dict) -> dict:
         # Save outputs to a file
         for cmd in device["commands"]:
             response = await conn.send_command(cmd)
-            logging.info(f'Saving the CLI output of {cmd}...')
+            logger.info(f'Saving the CLI output of {cmd}...')
             with open(f"{host}.txt", "a") as file:
                 file.write(f"{cmd}\n")
                 file.write(f"{response.result}\n")
@@ -154,11 +173,12 @@ async def parse_device(device: dict, command_parsers: dict) -> dict:
         await conn.close()
 
     except Exception as exc:
-        logging.error(f"Error encountered during establishing SSH and parsing for {device['address']}: {exc}")
+        logger.error(f"Error encountered during establishing SSH and parsing for {device['address']}: {exc}")
         return {host: {"error": f"Failed to parse device: {exc}"}}
     
     result[host].update(cmd_out)
-    logging.info(f'Finish parsing {host}...')
+    device["json_data"] = result
+    logger.info(f'Finish parsing {host}...')
     return result
 
 
@@ -188,6 +208,59 @@ async def write_json(output_path: Path, data: dict):
         await file.write(json.dumps(data, indent=4))
 
 
+# Function to handle the conversion of lists to strings
+def convert_lists_to_strings(item: list):
+    if isinstance(item, list):
+        return ', '.join(map(str, item))
+    return item
+
+
+# Function to convert nested dictionaries to rows in a DataFrame
+def dict_to_rows(cmd_dict: dict):
+    rows = []
+    for key, value in cmd_dict.items():
+        # Create a row for each key
+        if isinstance(value, dict):
+            row = {'key': key}
+            # Add the nested key-values as new columns in this row
+            for subkey, subvalue in value.items():
+                row[subkey] = convert_lists_to_strings(subvalue)
+            rows.append(row)
+        else:
+            # If the value is not a dictionary, just add the value directly
+            rows.append({'key': key, 'value': convert_lists_to_strings(value)})
+    return pd.DataFrame(rows)
+
+
+# Function to convert JSON data for a show command into a DataFrame
+def json_to_dataframe(data: dict | list):
+    if isinstance(data, dict):
+        # Process the dictionary to create rows
+        return dict_to_rows(data)
+    elif isinstance(data, list):
+        # Process each item in the list to ensure that lists are joined into strings
+        processed_data = [{k: convert_lists_to_strings(v) for k, v in item.items()} for item in data]
+        return pd.DataFrame(processed_data)
+    else:
+        raise ValueError("Data is neither a dictionary nor a list")
+
+
+def write_to_excel(output_path: Path, data: dict):
+
+    device_name = list(data.keys())[0]
+    full_filename = output_path / f"{device_name}.xlsx"
+
+    # Create a new Excel writer object for this device
+    with pd.ExcelWriter(f'{full_filename}', engine='openpyxl') as writer:
+        for commands in data.values():
+            # Iterate over each show command for the device
+            for command_name, command_data in commands.items():
+                # Convert the command data to a DataFrame
+                df = json_to_dataframe(command_data)
+                # Write the DataFrame to a new sheet in the Excel file
+                df.to_excel(writer, sheet_name=command_name, index=False)
+
+
 async def process_and_write(device: dict, command_parsers: dict):
     try:
         output = await process_device(device, command_parsers)
@@ -196,10 +269,12 @@ async def process_and_write(device: dict, command_parsers: dict):
         output = {name:{"msg": f"Failed to process device {name}", "error": f"{e}"}}
 
     if not output.keys():
-        logging.error(f'Found no key from parsing result of {device["host"] if "host" in device else device["file"]}')
+        logger.error(f'Found no key from parsing result of {device["host"] if "host" in device else device["file"]}')
     elif list(output.keys())[0]:
-        logging.info(f'Writing {list(output.keys())[0]} to JSON file...')
+        logger.info(f'Writing {list(output.keys())[0]} to JSON file...')
         await write_json(device["output_path"], output)
+        if device.get("excel"):
+            write_to_excel(device["output_path"], output)
     return output
 
 
@@ -259,6 +334,8 @@ async def load_configuration(args_dict: dict) -> dict:
                 raise ValueError(f"Cisco IOS does not support JSON output format")
         if "output_path" not in device:
             device["output_path"] = Path(args_dict.get("output_path", Path.cwd()))
+        if "excel" not in device:
+            device["excel"] = args_dict.get("excel", False)
         if "commands" not in device:
             if "commands" not in args_dict:
                 if device["os_type"] == "nxos":
@@ -270,7 +347,7 @@ async def load_configuration(args_dict: dict) -> dict:
     return args_dict
 
 
-def parse_NetJect_args():
+def parse_args():
 
     # Create the argument parser
     parser = argparse.ArgumentParser(description='NetJect - Network JSON Object')
@@ -284,10 +361,16 @@ def parse_NetJect_args():
     parser.add_argument('--output_path', type=str, help='Path to save the output.')
     parser.add_argument('--commands', nargs='*', help='List of commands to execute.')
     parser.add_argument('--addresses', nargs='*', help='List of device addresses.')
-    parser.add_argument('--files', nargs='*', help='List of files with device information.')
+    parser.add_argument('--files', nargs='*', help='List of files with device\'s show commands CLI output.')
+    parser.add_argument('--excel', type=bool, help='Write data to Excel (True | False)')
 
     args = parser.parse_args()
 
+    return args
+
+
+def parse_args_NetJect(args) -> dict:
+    
     args_dict = {}
     
     if args.config:
@@ -298,10 +381,10 @@ def parse_NetJect_args():
                 with open(config_file, 'r') as stream:
                     args_dict = yaml.safe_load(stream)
             else:
-                logging.error(f"NetJect-config.yaml file is not found in {config_path}.")
+                logger.error(f"NetJect-config.yaml file is not found in {config_path}.")
                 raise ValueError(f"NetJect-config.yaml file is not found in {config_path}.")
         else:
-            logging.error(f"Path {args.config} not found.")
+            logger.error(f"Path {args.config} not found.")
             raise ValueError(f"NetJect-config.yaml file is not found in {config_path}.")
     elif args.addresses or args.files:
         # Convert arguments to a dictionary, removing any None values
@@ -317,7 +400,7 @@ def parse_NetJect_args():
             with open(config_file, 'r') as stream:
                 args_dict = yaml.safe_load(stream)
         else:
-            logging.error(f"Path to the NetJect-config.yaml configuration file is not provided and NetJect-config.yaml file is not found in current working directory.")
+            logger.error(f"Path to the NetJect-config.yaml configuration file is not provided and NetJect-config.yaml file is not found in current working directory.")
             raise ValueError(f"Path to the NetJect-config.yaml configuration file is not provided and NetJect-config.yaml file is not found in current working directory.")
 
     if "devices" not in args_dict or len(args_dict["devices"]) == 0:
@@ -326,7 +409,7 @@ def parse_NetJect_args():
     return args_dict
 
 
-async def NetJect(args_dict) -> dict:
+async def NetJect(args_dict: dict) -> dict:
 
     # command_parsers based on the OS type
     command_parsers = {
@@ -383,11 +466,29 @@ async def NetJect(args_dict) -> dict:
     return outputs
 
 
+if __name__ != "__main__":
+    # Add a handler to logger to handle only ERROR level messages
+    handler = logging.StreamHandler()
+    handler.setLevel(logging.ERROR)
+    formatter = logging.Formatter('[%(asctime)s] [%(levelname)s]: %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(logging.ERROR)  # Set logger to only pass ERROR messages and above
+
+
 # Call the async NetJect function
 if __name__ == "__main__":
     # Setting up logging
-    logging.basicConfig(
-        level=logging.INFO, format="[%(asctime)s] [%(levelname)s]: %(message)s"
-    )
-    args_dict = parse_NetJect_args()
+    # logging.basicConfig(
+    #     level=logging.INFO, format="[%(asctime)s] [%(levelname)s]: %(message)s"
+    # )
+    # Add a handler to logger to handle only ERROR level messages
+    handler = logging.StreamHandler()
+    handler.setLevel(logging.INFO)
+    formatter = logging.Formatter('[%(asctime)s] [%(levelname)s]: %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)  # Set logger to only pass INFO messages and above
+    args = parse_args()
+    args_dict = parse_args_NetJect(args)
     outputs = asyncio.run(NetJect(args_dict))

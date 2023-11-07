@@ -69,6 +69,6 @@ def parse_ios_show_interface_status(cli_output: str) -> dict:
                     interfaces[interface][attr] = ""
                 
     except Exception as e:
-        interfaces["errpr"] = f"{e}"
+        interfaces["error"] = f"{e}"
 
     return interfaces

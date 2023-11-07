@@ -1,7 +1,9 @@
-from .NetJect import parse_NetJect_args
+from .NetJect import parse_args_NetJect
 from .NetJect import NetJect
+from .NetJect import load_configuration
 
 __all__ = [
-    'parse_NetJect_args',
+    'parse_args_NetJect',
     'NetJect',
+    'load_configuration'
 ]

@@ -1,3 +1,5 @@
 scrapli
 pyyaml
 aiofiles
+pandas
+openpyxl
