@@ -219,23 +219,22 @@ def convert_lists_to_strings(item: list):
 # Function to convert nested dictionaries to rows in a DataFrame
 def dict_to_rows(cmd_dict: dict):
     rows = []
-    # Iterate over the first level keys and values
     for key, value in cmd_dict.items():
+        # Create a row for each key
         if isinstance(value, dict):
-            # Iterate over the second level keys and values
+            # Add the nested key-values as new columns in this row
             for subkey, subvalue in value.items():
+                row = {'key': key}
                 if isinstance(subvalue, dict):
-                    # Use the first level key and second level key as part of the row
-                    row = {'key': key, 'key2': subkey}
-                    # Add the nested key-values as new columns in this row
-                    for nested_key, nested_value in subvalue.items():
-                        row[nested_key] = convert_lists_to_strings(nested_value)
+                    row.update({'key2': subkey})
+                    row.update({subkey2: convert_lists_to_strings(subvalue2) for subkey2, subvalue2 in subvalue.items()})
                     rows.append(row)
                 else:
-                    # If the subvalue is not a dictionary, handle it as a special case
-                    rows.append({'key': key, 'key2': subkey, 'value': convert_lists_to_strings(subvalue)})
+                    row.update({subkey: convert_lists_to_strings(subvalue) for subkey, subvalue in value.items()})
+                    rows.append(row)
+                    break
         else:
-            # If the value is not a dictionary, handle it as a special case
+            # If the value is not a dictionary, just add the value directly
             rows.append({'key': key, 'value': convert_lists_to_strings(value)})
     return pd.DataFrame(rows)
 
@@ -266,8 +265,9 @@ def write_to_excel(output_path: Path, data: dict):
             for command_name, command_data in commands.items():
                 # Convert the command data to a DataFrame
                 df = json_to_dataframe(command_data)
+                sheet_name = command_name[:31]
                 # Write the DataFrame to a new sheet in the Excel file
-                df.to_excel(writer, sheet_name=command_name, index=False)
+                df.to_excel(writer, sheet_name=sheet_name, index=False)
 
 
 async def process_and_write(device: dict, command_parsers: dict):

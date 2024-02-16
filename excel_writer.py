@@ -30,9 +30,11 @@ def dict_to_rows(cmd_dict):
                 if isinstance(subvalue, dict):
                     row.update({'key2': subkey})
                     row.update({subkey2: convert_lists_to_strings(subvalue2) for subkey2, subvalue2 in subvalue.items()})
+                    rows.append(row)
                 else:
                     row.update({subkey: convert_lists_to_strings(subvalue) for subkey, subvalue in value.items()})
-                rows.append(row)
+                    rows.append(row)
+                    break
         else:
             # If the value is not a dictionary, just add the value directly
             rows.append({'key': key, 'value': convert_lists_to_strings(value)})
