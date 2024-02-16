@@ -13,6 +13,7 @@ from scrapli.driver.core import AsyncNXOSDriver
 from typing import Any, Callable
 from ios_parser import *
 from nxos_parser import *
+from typing import Tuple
 
 
 # Disable propagation to prevent logs from being handled by ancestor loggers
@@ -31,7 +32,7 @@ async def finalize_device_output(device: dict, device_output: dict) -> dict:
     return device_output
 
 
-async def parse_cmd_output(cmd: str, output: str or dict, format: str, parser: Callable[[dict], dict]) -> (str, dict):
+async def parse_cmd_output(cmd: str, output: str | dict, format: str, parser: Callable[[dict], dict]) -> Tuple[str, dict]:
     """Parses the output of specifc show command."""
 
     logger.info(f'Parsing the output of {cmd}...')
