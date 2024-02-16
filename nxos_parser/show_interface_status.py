@@ -15,7 +15,6 @@ def parse_nxos_show_interface_status(cli_output: str) -> dict:
             "separator_line": r"^-+"
         }
 
-        
         lines = cli_output.split("\n")
 
         # Identify header and column start indices

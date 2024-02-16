@@ -17,7 +17,7 @@ def parse_ios_show_interface(cli_output: str) -> dict:
             "mtu": r"MTU (.+?) bytes",
             "encapsulation": r"Encapsulation (.+?),",
             "duplex": r"(\w+-duplex)",
-            "speed": r", (\d+[GM]b/s),",
+            "speed": r", (\d+[GM]b/s)",
             "media": r"media type is (.+)",
             "members": r"Members in this channel: (.+)"
         }

@@ -17,9 +17,9 @@ def parse_ios_show_cdp_neighbor(cli_output: str) -> dict:
             capability_mapping[code] = name.strip()
 
         regex_map = {
-            "only_nei_info": r"\s+(?P<local_int>[/\w ]+?)\s+(?P<holdtime>\d+)\s+(?P<capability>[A-Z ]+)\s+(?P<platform>\S+)\s+(?P<port_id>[/\w ]+)",
+            "only_nei_info": r"\s+(?P<local_int>[/\w ]+?)\s+(?P<holdtime>\d+)\s+(?P<capability>[A-Za-z ]+)\s+(?P<platform>\S+)\s+(?P<port_id>[/\w ]+)",
             "only_device_id": r"^(?P<device_id>\S+)$",
-            "full_info": r"^(?P<device_id>\S+)\s+(?P<local_int>[/\w ]+?)\s+(?P<holdtime>\d+)\s+(?P<capability>[A-Z ]+)\s+(?P<platform>\S+)\s+(?P<port_id>[/\w ]+)"
+            "full_info": r"^(?P<device_id>\S+)\s+(?P<local_int>[/\w ]+?)\s+(?P<holdtime>\d+)\s+(?P<capability>[A-Za-z ]+)\s+(?P<platform>\S+)\s+(?P<port_id>[/\w ]+)"
         }
 
         neighbors = {}
@@ -35,13 +35,19 @@ def parse_ios_show_cdp_neighbor(cli_output: str) -> dict:
             if match:
                 capability_list = [capability_mapping[code] for code in match.group("capability").strip().split() if code in capability_mapping] 
                 capability = ", ".join(capability_list)
-                neighbors[match.group("device_id")] = {
-                    "local_interface": match.group("local_int").strip(),
-                    "holdtime": match.group("holdtime"),
-                    "capability": capability,
-                    "platform": match.group("platform"),
-                    "port_id": match.group("port_id")
-                }
+                device_id = match.group("device_id")
+                data =  {
+                            f'local_int_{match.group("local_int").strip()}': {
+                                # "holdtime": match.group("holdtime"),
+                                "capability": capability,
+                                "platform": match.group("platform"),
+                                "port_id": match.group("port_id")
+                            }
+                        }
+                if device_id in neighbors:
+                    neighbors[device_id].update(data)
+                else:
+                    neighbors[device_id] = data
             else:
                 match_device_id = re.search(regex_map["only_device_id"], lines[i])
                 if match_device_id and i + 1 < len(lines):
@@ -51,20 +57,26 @@ def parse_ios_show_cdp_neighbor(cli_output: str) -> dict:
                     if match_info:
                         capability_list = [capability_mapping[code] for code in match_info.group("capability").strip().split() if code in capability_mapping] 
                         capability = ", ".join(capability_list)
-                        neighbors[match_device_id.group("device_id")] = {
-                            "local_interface": match_info.group("local_int").strip(),
-                            "holdtime": match_info.group("holdtime"),
-                            "capability": capability,
-                            "platform": match_info.group("platform"),
-                            "port_id": match_info.group("port_id")
+                        data = {
+                            f'local_int_{match_info.group("local_int").strip()}': {
+                                # "holdtime": match_info.group("holdtime"),
+                                "capability": capability,
+                                "platform": match_info.group("platform"),
+                                "port_id": match_info.group("port_id")
+                            }
                         }
+                        device_id = match_device_id.group("device_id")
+                        if device_id in neighbors:
+                            neighbors[device_id].update(data)
+                        else:
+                            neighbors[device_id] = data
             i = i + 1
 
-        attributes = ["local_interface","holdtime","capability","platform","port_id"]
-        for attr in attributes:
-            for neighbor, values in neighbors.items():
-                if attr not in values:
-                    neighbors[neighbor][attr] = ""
+        # attributes = ["local_interface","holdtime","capability","platform","port_id"]
+        # for attr in attributes:
+        #     for neighbor, values in neighbors.items():
+        #         if attr not in values:
+        #             neighbors[neighbor][attr] = ""
 
     except Exception as e:
         return {"error": f"{e}"}

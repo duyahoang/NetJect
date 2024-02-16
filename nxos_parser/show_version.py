@@ -8,32 +8,30 @@ def parse_nxos_show_version(cli_output: str) -> dict:
 
     logging.info('Parsing nxos "show version"...')
 
-    # Define regular expressions for the attributes
-    regex_map = {
-        "bios_version": r"BIOS: version (.+)",
-        "loader_version": r"loader: version (.+)",
-        "kickstart_version": r"kickstart: version (.+)",
-        "system_version": r"system: version (.+)",
-        "bios_compile_time": r"BIOS compile time: (.+)",
-        "kickstart_image_file": r"kickstart image file is: (.+)",
-        "kickstart_compile_time": r"kickstart compile time: (.+)",
-        "system_image_file": r"system image file is: (.+)",
-        "system_compile_time": r"system compile time: (.+)",
-        "chassis": r"cisco (.+Chassis)",
-        "processor_info": r"(.+CPU with .+ kB of memory.)",
-        "processor_board_id": r"Processor Board ID (.+)",
-        "device_name": r"Device name: (.+)",
-        "bootflash": r"bootflash: (.+ kB)",
-        "kernel_uptime": r"Kernel uptime is (.+)",
-        "last_reset": r"Last reset at .+ after (.+)",
-        "last_reset_reason": r"Reason: (.+)",
-        "system_version_long": r"System version: (.+)",
-    }
+    try:
+        # Define regular expressions for the attributes
+        regex_map = {
+            "bios_version": r"BIOS:\s+version\s(.+)",
+            "loader_version": r"loader:\s+version\s+(.+)",
+            "kickstart_version": r"kickstart:\s+version\s+(.+)",
+            "system_version": r"system:\s+version\s+(.+)",
+            "kickstart_image_file": r"kickstart image file is:\s+(.+)",
+            "system_image_file": r"system image file is:\s+(.+)",
+            "platform": r"(cisco Nexus .+Chassis.+)",
+            "device_name": r"Device name:\s+(.+)",
+        }
 
-    result = {}
-    for key, regex in regex_map.items():
-        match = re.search(regex, cli_output, re.MULTILINE)
-        if match:
-            result[key] = match.group(1)
+        result = {}
+        for key, regex in regex_map.items():
+            match = re.search(regex, cli_output, re.MULTILINE)
+            if match:
+                result[key] = match.group(1)
+        
+        for key in regex_map.keys():
+            if key not in result:
+                result[key] = ""
+    
+    except Exception as e:
+        return {"error": f"{e}"}
 
     return result

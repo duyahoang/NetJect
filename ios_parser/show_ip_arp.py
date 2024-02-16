@@ -23,7 +23,7 @@ def parse_ios_show_ip_arp(cli_output: str) -> list:
                 ip_arp_list.append({
                     "protocol": match.group("protocol"),
                     "address": match.group("address"),
-                    "age": match.group("age"),
+                    # "age": match.group("age"),
                     "hardware_address": match.group("hardware_address"),
                     "type": match.group("type"),
                     "interface": match.group("interface"),

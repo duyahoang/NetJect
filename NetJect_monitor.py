@@ -55,9 +55,12 @@ def load_original_state(file_list):
 
 # Process each device
 async def process_device(device: dict):
+    just_up = False
     while True:
         try:
             if await ping_device(device):
+                if just_up:
+                    await asyncio.sleep(3)
                 current_state = await NetJect({"devices": [device]})
                 current_state = current_state[0]
                 hostname = list(current_state.keys())[0]
@@ -66,6 +69,9 @@ async def process_device(device: dict):
                     logger.info(f"{hostname} state has been changed:\n{diff}")
                 else:
                     logger.info(f"{hostname} state has no changed.")
+                just_up = False
+            else:
+                just_up = True
         except Exception as e:
             logger.error(f"An error occurred during processing device {device['address']}: {str(e)}")
         finally:

@@ -126,7 +126,7 @@ async def parse_device(device: dict, command_parsers: dict) -> dict:
                 auth_strict_key=False,
                 transport="asyncssh",
             )
-            logger.info(f"onnecting to {host} and retrieving show commands output...")
+            logger.info(f"Connecting to {host} and retrieving show commands output...")
             await conn.open()
         else:
             raise ValueError(f"Unsupported OS type: {device['os_type']}")
@@ -165,8 +165,9 @@ async def parse_device(device: dict, command_parsers: dict) -> dict:
         # Save outputs to a file
         for cmd in device["commands"]:
             response = await conn.send_command(cmd)
-            logger.info(f'Saving the CLI output of {cmd}...')
-            with open(f"{host}.txt", "a") as file:
+            full_filename = device['output_path'] / f"{host}.txt"
+            logger.info(f'Saving the CLI output of {cmd} to {full_filename}...')
+            with open(f"{full_filename}", "a") as file:
                 file.write(f"{cmd}\n")
                 file.write(f"{response.result}\n")
     
@@ -203,7 +204,7 @@ async def write_json(output_path: Path, data: dict):
     for host, _ in data.items():
         filename = f"{host}.json"
     full_filename = output_path / filename
-
+    logger.info(f'Writing {list(data.keys())[0]} to JSON file {full_filename}...')
     async with aiofiles.open(str(full_filename), "w") as file:
         await file.write(json.dumps(data, indent=4))
 
@@ -218,16 +219,23 @@ def convert_lists_to_strings(item: list):
 # Function to convert nested dictionaries to rows in a DataFrame
 def dict_to_rows(cmd_dict: dict):
     rows = []
+    # Iterate over the first level keys and values
     for key, value in cmd_dict.items():
-        # Create a row for each key
         if isinstance(value, dict):
-            row = {'key': key}
-            # Add the nested key-values as new columns in this row
+            # Iterate over the second level keys and values
             for subkey, subvalue in value.items():
-                row[subkey] = convert_lists_to_strings(subvalue)
-            rows.append(row)
+                if isinstance(subvalue, dict):
+                    # Use the first level key and second level key as part of the row
+                    row = {'key': key, 'key2': subkey}
+                    # Add the nested key-values as new columns in this row
+                    for nested_key, nested_value in subvalue.items():
+                        row[nested_key] = convert_lists_to_strings(nested_value)
+                    rows.append(row)
+                else:
+                    # If the subvalue is not a dictionary, handle it as a special case
+                    rows.append({'key': key, 'key2': subkey, 'value': convert_lists_to_strings(subvalue)})
         else:
-            # If the value is not a dictionary, just add the value directly
+            # If the value is not a dictionary, handle it as a special case
             rows.append({'key': key, 'value': convert_lists_to_strings(value)})
     return pd.DataFrame(rows)
 
@@ -251,6 +259,7 @@ def write_to_excel(output_path: Path, data: dict):
     full_filename = output_path / f"{device_name}.xlsx"
 
     # Create a new Excel writer object for this device
+    logger.info(f'Writing {list(data.keys())[0]} to Excel {full_filename}...')
     with pd.ExcelWriter(f'{full_filename}', engine='openpyxl') as writer:
         for commands in data.values():
             # Iterate over each show command for the device
@@ -271,7 +280,6 @@ async def process_and_write(device: dict, command_parsers: dict):
     if not output.keys():
         logger.error(f'Found no key from parsing result of {device["host"] if "host" in device else device["file"]}')
     elif list(output.keys())[0]:
-        logger.info(f'Writing {list(output.keys())[0]} to JSON file...')
         await write_json(device["output_path"], output)
         if device.get("excel"):
             write_to_excel(device["output_path"], output)
@@ -362,7 +370,7 @@ def parse_args():
     parser.add_argument('--commands', nargs='*', help='List of commands to execute.')
     parser.add_argument('--addresses', nargs='*', help='List of device addresses.')
     parser.add_argument('--files', nargs='*', help='List of files with device\'s show commands CLI output.')
-    parser.add_argument('--excel', type=bool, help='Write data to Excel (True | False)')
+    parser.add_argument('--excel', action='store_true', help='Write data to Excel.')
 
     args = parser.parse_args()
 
@@ -470,7 +478,7 @@ if __name__ != "__main__":
     # Add a handler to logger to handle only ERROR level messages
     handler = logging.StreamHandler()
     handler.setLevel(logging.ERROR)
-    formatter = logging.Formatter('[%(asctime)s] [%(levelname)s]: %(message)s')
+    formatter = logging.Formatter('[%(asctime)s] [%(levelname)s]: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
     handler.setFormatter(formatter)
     logger.addHandler(handler)
     logger.setLevel(logging.ERROR)  # Set logger to only pass ERROR messages and above
@@ -485,7 +493,7 @@ if __name__ == "__main__":
     # Add a handler to logger to handle only ERROR level messages
     handler = logging.StreamHandler()
     handler.setLevel(logging.INFO)
-    formatter = logging.Formatter('[%(asctime)s] [%(levelname)s]: %(message)s')
+    formatter = logging.Formatter('[%(asctime)s] [%(levelname)s]: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
     handler.setFormatter(formatter)
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)  # Set logger to only pass INFO messages and above
