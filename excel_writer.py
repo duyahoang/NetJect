@@ -24,11 +24,15 @@ def dict_to_rows(cmd_dict):
     for key, value in cmd_dict.items():
         # Create a row for each key
         if isinstance(value, dict):
-            row = {'key': key}
             # Add the nested key-values as new columns in this row
             for subkey, subvalue in value.items():
-                row[subkey] = convert_lists_to_strings(subvalue)
-            rows.append(row)
+                row = {'key': key}
+                if isinstance(subvalue, dict):
+                    row.update({'key2': subkey})
+                    row.update({subkey2: convert_lists_to_strings(subvalue2) for subkey2, subvalue2 in subvalue.items()})
+                else:
+                    row.update({subkey: convert_lists_to_strings(subvalue) for subkey, subvalue in value.items()})
+                rows.append(row)
         else:
             # If the value is not a dictionary, just add the value directly
             rows.append({'key': key, 'value': convert_lists_to_strings(value)})
@@ -59,14 +63,15 @@ def write_to_excel(data):
             for command_name, command_data in commands.items():
                 # Convert the command data to a DataFrame
                 df = json_to_dataframe(command_data)
+                sheet_name = command_name[:31]
                 # Write the DataFrame to a new sheet in the Excel file
-                df.to_excel(writer, sheet_name=command_name, index=False)
+                df.to_excel(writer, sheet_name=sheet_name, index=False)
 
 def main():
 
     # Set up the argument parser
     parser = argparse.ArgumentParser(description='Write JSON data to Excel')
-    parser.add_argument('--json_file', type=str, help='The JSON data file')
+    parser.add_argument('--file', type=str, help='The JSON data file')
     parser.add_argument('--directory', type=str, help='The directory that has one or multiple JSON files.')
 
     # Parse arguments
@@ -75,8 +80,8 @@ def main():
     data_list = []
 
     # Read the JSON file
-    if args.json_file:
-        with open(args.json_file, 'r') as content:
+    if args.file:
+        with open(args.file, 'r') as content:
             data = json.load(content)
             data_list.append(data)
     
