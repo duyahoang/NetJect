@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Device Status Updates</title>
+    <title>NetJect Monitor - Device Status Updates</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <style>
         .device-status {
@@ -37,11 +37,24 @@
             } else if (Array.isArray(data.diffs)) {
                 diffsHtml = data.diffs.map(diff => `<li>${diff}</li>`).join('');
             }
+
+            // Determine status color
+            var statusText = '';
+            if (data.status === 'Down') {
+                statusText = `Status: <span style="color: red;">Down</span>`;
+            } else if (data.status === 'Up' && data.diffs === 'State has no changed.') {
+                statusText = `Status: <span style="color: green;">Up</span>`;
+            } else if (data.status === 'Up' && data.diffs.includes('State has been changed')) {
+                statusText = `Status: <span style="color: orange;">Up</span>`;
+            } else {
+                // Fallback for any other status
+                statusText = `Status: ${data.status}`;
+            }
     
             deviceDiv.innerHTML = `
                 <h3>Device: ${data.device}</h3>
                 <p>IP address: ${data.device_ip}</p>
-                <p>Status: ${data.status}</p>
+                <p>${statusText}</p>
                 <p>Last Checked: ${data.time_checked}</p>
                 <h4>Diffs:</h4>
                 <ul>${diffsHtml}</ul>
