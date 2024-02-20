@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Device Status Updates</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        .device-status {
+            border: 1px solid #ccc;
+            margin-bottom: 20px;
+            padding: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h2>Device Status Updates</h2>
+    <div id="deviceStatuses"></div>
+
+    <script>
+        var socket = io.connect('http://' + document.domain + ':' + location.port);
+    
+        socket.on('device_update', function(msg) {
+            var data = JSON.parse(msg);
+            var deviceStatuses = document.getElementById('deviceStatuses');
+            var deviceDiv = document.getElementById(data.device_ip);
+    
+            if (!deviceDiv) {
+                deviceDiv = document.createElement('div');
+                deviceDiv.ip = data.device_ip;
+                deviceDiv.className = 'device-status';
+                deviceStatuses.appendChild(deviceDiv);
+            }
+    
+            // Handling diffs depending on their type (assuming diffs could be a string or an array of objects)
+            var diffsHtml = '';
+            if (typeof data.diffs === 'string') {
+                diffsHtml = `<li>${data.diffs}</li>`;
+            } else if (Array.isArray(data.diffs)) {
+                diffsHtml = data.diffs.map(diff => `<li>${diff}</li>`).join('');
+            }
+    
+            deviceDiv.innerHTML = `
+                <h3>Device: ${data.device}</h3>
+                <p>IP address: ${data.device_ip}</p>
+                <p>Status: ${data.status}</p>
+                <p>Last Checked: ${data.time_checked}</p>
+                <h4>Diffs:</h4>
+                <ul>${diffsHtml}</ul>
+            `;
+        });
+    </script>
+
+</body>
+</html>

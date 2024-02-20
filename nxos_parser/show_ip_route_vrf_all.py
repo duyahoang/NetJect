@@ -35,7 +35,7 @@ def parse_nxos_show_ip_route_vrf_all(cli_output: str) -> dict:
                     "interface": match[5],
                     "preference": match[6],
                     "metric": match[7],
-                    "age": match[8],
+                    # "age": match[8],
                     "route_type": match[9]
                 } for match in route_entries
             }

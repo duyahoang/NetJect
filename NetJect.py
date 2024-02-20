@@ -116,9 +116,7 @@ async def parse_device(device: dict, command_parsers: dict) -> dict:
                 auth_password=device["password"],
                 auth_strict_key=False,
                 transport="asyncssh",
-            )
-            logger.info(f"Connecting to {host} and retrieving show commands output...")
-            await conn.open()
+            )        
         elif device["os_type"] == "nxos":
             conn = AsyncNXOSDriver(
                 host=device["address"],
@@ -127,10 +125,11 @@ async def parse_device(device: dict, command_parsers: dict) -> dict:
                 auth_strict_key=False,
                 transport="asyncssh",
             )
-            logger.info(f"Connecting to {host} and retrieving show commands output...")
-            await conn.open()
         else:
             raise ValueError(f"Unsupported OS type: {device['os_type']}")
+
+        logger.info(f"Connecting to {host} and retrieving show commands output...")
+        await conn.open()
 
         hostname_response = await conn.send_command("show hostname")
         device["hostname"] = hostname_response.result
@@ -409,8 +408,8 @@ def parse_args_NetJect(args) -> dict:
             with open(config_file, 'r') as stream:
                 args_dict = yaml.safe_load(stream)
         else:
-            logger.error(f"Path to the NetJect-config.yaml configuration file is not provided and NetJect-config.yaml file is not found in current working directory.")
-            raise ValueError(f"Path to the NetJect-config.yaml configuration file is not provided and NetJect-config.yaml file is not found in current working directory.")
+            logger.error(f"Path to the NetJect-config.yaml configuration file is not provided or NetJect-config.yaml file is not found in current working directory.")
+            raise ValueError(f"Path to the NetJect-config.yaml configuration file is not provided or NetJect-config.yaml file is not found in current working directory.")
 
     if "devices" not in args_dict or len(args_dict["devices"]) == 0:
         raise ValueError(f"No devices are provided.")
