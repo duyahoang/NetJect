@@ -44,7 +44,7 @@
                 statusText = `Status: <span style="color: red;">Down</span>`;
             } else if (data.status === 'Up' && data.diffs === 'State has no changed.') {
                 statusText = `Status: <span style="color: green;">Up</span>`;
-            } else if (data.status === 'Up' && data.diffs.includes('State has been changed')) {
+            } else if (data.status === 'Up' && data.diffs.includes('State has been changed.')) {
                 statusText = `Status: <span style="color: orange;">Up</span>`;
             } else {
                 // Fallback for any other status

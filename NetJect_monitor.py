@@ -83,7 +83,7 @@ async def process_device(device: dict):
                 if diff:
                     logger.info(f"{hostname} state has been changed:\n{diff}")
                     res = {"device_ip": device.get("address", "No address found in device config"), "device": hostname, "status": "Up"}
-                    res.update({"diffs": ["State has been changed"].append(diff)})
+                    res.update({"diffs": ["State has been changed.", diff]})
                     res.update({"time_checked": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime())})
                 else:
                     logger.info(f"{hostname} state has no changed.")
