@@ -84,12 +84,12 @@ async def process_device(device: dict):
                     logger.info(f"{hostname} state has been changed:\n{diff}")
                     res = {"device_ip": device.get("address", "No address found in device config"), "device": hostname, "status": "Up"}
                     res.update({"diffs": ["State has been changed"].append(diff)})
-                    res.update({"time_checked": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.localtime())})
+                    res.update({"time_checked": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime())})
                 else:
                     logger.info(f"{hostname} state has no changed.")
                     res = {"device_ip": device.get("address", "No address found in device config"), "device": hostname, "status": "Up"}
                     res.update({"diffs": "State has no changed."})
-                    res.update({"time_checked": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.localtime())})
+                    res.update({"time_checked": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime())})
             else:
                 try:
                     res = {"device": hostname}
@@ -98,7 +98,7 @@ async def process_device(device: dict):
                 res.update({"device_ip": device.get("address", "No address found in device config")})
                 res.update({"status": "Down"})
                 res.update({"diffs": "Not process yet."})
-                res.update({"time_checked": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.localtime())})
+                res.update({"time_checked": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime())})
         except Exception as e:
             logger.error(f"An error occurred during processing device {device['address']}: {str(e)}")
         finally:
