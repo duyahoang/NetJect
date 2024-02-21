@@ -1,5 +1,9 @@
 scrapli
 pyyaml
 aiofiles
+aioping
 pandas
 openpyxl
+deepdiff
+flask
+flask_socketio

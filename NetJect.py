@@ -10,10 +10,9 @@ import pandas as pd
 from pathlib import Path
 from scrapli.driver.core import AsyncIOSXEDriver
 from scrapli.driver.core import AsyncNXOSDriver
-from typing import Any, Callable
+from typing import Any, Callable, Tuple
 from ios_parser import *
 from nxos_parser import *
-from typing import Tuple
 
 
 # Disable propagation to prevent logs from being handled by ancestor loggers
